@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Labo GPS sur carte</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root { --bg: #eef1f5; --panel: #fff; --text: #1d2939; --muted: #667085; --line: #d0d5dd; --accent: #2563eb; --accent-soft: #eff4ff;
+    --ok: #067647; --okbg: #ecfdf3; --warn: #b54708; --warnbg: #fffaeb; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 12px 12px 40px; }
+  h1 { font-size: 20px; margin: 2px 0; }
+  h2 { font-size: 17px; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 10px; font-size: 13px; }
+  .card { background: var(--panel); border-radius: 14px; padding: 12px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(16, 24, 40, .06); }
+  .btn { appearance: none; border: 0; border-radius: 10px; min-height: 44px; padding: 0 14px; font: inherit; font-weight: 700; background: #f2f4f7; color: var(--text); cursor: pointer; touch-action: manipulation; }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn.small { min-height: 36px; padding: 0 10px; font-size: 14px; }
+  .btn[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .row .grow { flex: 1 1 180px; }
+  #map { height: 60vh; border-radius: 12px; margin-bottom: 8px; background: #d9dee6; }
+  input.txt { font: inherit; font-size: 16px; border: 1px solid var(--line); border-radius: 10px; min-height: 44px; padding: 0 10px; }
+  input.num { width: 90px; text-align: center; font-weight: 800; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 700; padding: 4px; }
+  td { padding: 6px 4px; border-top: 1px solid #eaecf0; }
+  .n { text-align: right; font-variant-numeric: tabular-nums; }
+  .sel td { background: var(--accent-soft); }
+  .msg { border-radius: 10px; padding: 8px 10px; margin: 8px 0 0; font-size: 14px; font-weight: 600; }
+  .msg.ok { background: var(--okbg); color: var(--ok); }
+  .msg.warn { background: var(--warnbg); color: var(--warn); }
+  .msg.info { background: var(--accent-soft); color: var(--accent); }
+  .note { color: var(--muted); font-size: 13px; }
+  .post-icon { background: none; border: 0; }
+  .post-icon .num { position: absolute; left: 26px; top: 26px; font: 800 15px system-ui, sans-serif; color: #dc2626; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; white-space: nowrap; }
+  .post-icon.sel .num { color: #2563eb; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Labo GPS sur carte</h1>
+  <p class="sub">Page de test, à part de l’application. Carte en ligne (réseau nécessaire) : pas de calage à faire. Rien n’est envoyé, les postes restent sur l’appareil. <span id="secure"></span></p>
+
+  <div id="map"></div>
+  <div class="row" style="margin-bottom:12px">
+    <button class="btn grow" id="whereBtn" aria-pressed="false">Où suis-je ?</button>
+    <span class="note" id="whereInfo"></span>
+  </div>
+
+  <section class="card">
+    <h2>Postes</h2>
+    <div class="row"><label for="postNum" class="note">Numéro du prochain poste</label><input class="txt num" id="postNum" type="number" inputmode="numeric" value="1"></div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn primary grow" id="postPhoto">Depuis une photo (photothèque)</button>
+      <button class="btn primary grow" id="postHere">Mesurer ici (GPS + boussole, 10 s)</button>
+    </div>
+    <input type="file" id="photoFile" accept="image/*" hidden>
+    <p class="note">Photo : prenez-la avec l’appareil photo de l’iPhone, puis choisissez-la ici dans la photothèque. « Mesurer ici » : au point de vue, tenez l’appareil <strong>droit, objectif vers la scène</strong>. Un poste mal placé se <strong>fait glisser</strong> sur la carte à sa vraie place : la page mesure alors l’erreur du GPS.</p>
+    <div id="postStatus"></div>
+    <div id="postSel"></div>
+    <div id="postTable" style="margin-top:8px"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn small" id="exportBtn">Exporter les postes (.json)</button>
+      <button class="btn small" id="resetBtn">Tout effacer</button>
+      <label class="note" for="decl">Déclinaison (°, + est)</label><input class="txt num" id="decl" type="number" step="0.1" inputmode="decimal" style="min-height:36px">
+    </div>
+  </section>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const f1 = (x) => String(Math.round(x * 10) / 10).replace('.', ',');
+  const f0 = (x) => String(Math.round(x));
+  const R = Math.PI / 180;
+  const norm = (a) => ((a % 360) + 360) % 360;
+  const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const M_LAT = 110574, mLon = (lat) => 111320 * Math.cos(lat * R);
+
+  const KEY = 'labo-gps-carte';
+  const S = { posts: [], decl: 1.5, view: null, sel: null, busy: false };
+  try { Object.assign(S, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { /* ignoré */ }
+  S.sel = null; S.busy = false;
+  function save() { try { localStorage.setItem(KEY, JSON.stringify({ posts: S.posts, decl: S.decl, view: S.view })); } catch (e) { /* stockage indisponible */ } }
+
+  // ---------- Carte : OpenStreetMap, Plan IGN, photo aérienne IGN ----------
+  const ign = (layer, fmt) => `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${layer}&STYLE=normal&TILEMATRIXSET=PM&FORMAT=${fmt}&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}`;
+  const layers = {
+    'Photo aérienne (IGN)': L.tileLayer(ign('ORTHOIMAGERY.ORTHOPHOTOS', 'image/jpeg'), { maxNativeZoom: 19, maxZoom: 21, attribution: '© IGN' }),
+    'Plan IGN': L.tileLayer(ign('GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2', 'image/png'), { maxNativeZoom: 18, maxZoom: 21, attribution: '© IGN' }),
+    'OpenStreetMap': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxNativeZoom: 19, maxZoom: 21, attribution: '© contributeurs OpenStreetMap' })
+  };
+  const map = L.map('map', { zoomControl: true });
+  layers['Photo aérienne (IGN)'].addTo(map);
+  L.control.layers(layers, null, { collapsed: true }).addTo(map);
+  L.control.scale({ imperial: false }).addTo(map);
+  if (S.view) map.setView(S.view.c, S.view.z); else map.setView([44.84, -0.55], 13);
+  map.on('moveend', () => { const c = map.getCenter(); S.view = { c: [c.lat, c.lng], z: map.getZoom() }; save(); });
+
+  // ---------- Capteurs : GPS (moyenne sur quelques secondes) et boussole ----------
+  function measure(seconds, onTick) {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) { reject(new Error('Géolocalisation non disponible.')); return; }
+      const samples = [], t0 = Date.now();
+      const id = navigator.geolocation.watchPosition((pos) => { samples.push(pos.coords); tick(); }, (err) => {
+        if (err.code === 1) { stop(); reject(new Error('Accès à la position refusé (autorisez-le pour ce site et pour le navigateur).')); }
+      }, { enableHighAccuracy: true, maximumAge: 0, timeout: seconds * 1000 + 15000 });
+      const timer = setInterval(tick, 500);
+      function stop() { navigator.geolocation.clearWatch(id); clearInterval(timer); }
+      function tick() {
+        const left = Math.max(0, seconds - (Date.now() - t0) / 1000);
+        const last = samples[samples.length - 1];
+        onTick && onTick(left, samples.length, last ? last.accuracy : null);
+        if (left > 0) return;
+        if (!samples.length) { if ((Date.now() - t0) / 1000 > seconds + 15) { stop(); reject(new Error('Aucune position reçue : localisation activée ? Essayez dehors.')); } return; }
+        stop();
+        let W = 0, la = 0, lo = 0;
+        for (const c of samples) { const w = 1 / Math.max(1, c.accuracy) ** 2; W += w; la += w * c.latitude; lo += w * c.longitude; }
+        la /= W; lo /= W;
+        const d = samples.map((c) => Math.hypot((c.latitude - la) * M_LAT, (c.longitude - lo) * mLon(la)));
+        const accs = samples.map((c) => c.accuracy).sort((a, b) => a - b);
+        resolve({ lat: la, lon: lo, acc: accs[Math.floor(accs.length / 2)], spread: Math.sqrt(d.reduce((a, x) => a + x * x, 0) / d.length), n: samples.length });
+      }
+    });
+  }
+  const compass = { started: false, samples: null };
+  async function startCompass() {
+    if (compass.started) return true;
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        if (await DeviceOrientationEvent.requestPermission() !== 'granted') return false;
+      }
+    } catch (e) { return false; }
+    compass.started = true;
+    let gotAbs = false;
+    const push = (h, upright) => { if (compass.samples) compass.samples.push({ h: norm(h), upright, t: Date.now() }); };
+    const onAbs = (e) => {
+      if (e.alpha === null) return;
+      // Tenu droit : direction de l'objectif (axe −z de l'appareil) ; à plat : haut de l'écran.
+      const a = e.alpha * R, b = e.beta * R, g = e.gamma * R;
+      const zx = Math.cos(a) * Math.sin(g) + Math.sin(a) * Math.sin(b) * Math.cos(g);
+      const zy = Math.sin(a) * Math.sin(g) - Math.cos(a) * Math.sin(b) * Math.cos(g);
+      const upright = Math.abs(Math.cos(b) * Math.cos(g)) < 0.7;
+      push(upright ? Math.atan2(-zx, -zy) / R : 360 - e.alpha, upright);
+    };
+    window.addEventListener('deviceorientationabsolute', (e) => { gotAbs = true; onAbs(e); });
+    window.addEventListener('deviceorientation', (e) => {
+      if (typeof e.webkitCompassHeading === 'number' && e.webkitCompassHeading >= 0) push(e.webkitCompassHeading, Math.abs(e.beta) > 45);
+      else if (!gotAbs && e.absolute === true) onAbs(e);
+    });
+    return true;
+  }
+  function meanHeading(list) {
+    if (!list || !list.length) return null;
+    let x = 0, y = 0;
+    for (const s of list) { x += Math.cos(s.h * R); y += Math.sin(s.h * R); }
+    const r = Math.hypot(x, y) / list.length;
+    return { h: norm(Math.atan2(y, x) / R), spread: Math.sqrt(-2 * Math.log(Math.max(r, 1e-9))) / R, upright: list.filter((s) => s.upright).length > list.length / 2 };
+  }
+
+  // ---------- Lecture EXIF d'une photo JPEG : position, précision, direction ----------
+  function readExif(buf) {
+    const v = new DataView(buf);
+    if (v.byteLength < 4 || v.getUint16(0) !== 0xFFD8) return null;
+    let p = 2;
+    while (p + 10 < v.byteLength) {
+      const marker = v.getUint16(p), len = v.getUint16(p + 2);
+      if (marker === 0xFFE1 && v.getUint32(p + 4) === 0x45786966) return parseTiff(v, p + 10);
+      if ((marker & 0xFF00) !== 0xFF00 || marker === 0xFFDA) break;
+      p += 2 + len;
+    }
+    return null;
+  }
+  function parseTiff(v, t) {
+    const le = v.getUint16(t) === 0x4949;
+    const u16 = (o) => v.getUint16(t + o, le), u32 = (o) => v.getUint32(t + o, le);
+    const SZ = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 7: 1, 9: 4, 10: 8, 11: 4, 12: 8 };
+    function ifd(off) {
+      const out = {};
+      if (!off || t + off + 2 > v.byteLength) return out;
+      const n = u16(off);
+      for (let i = 0; i < n; i++) {
+        const e = off + 2 + 12 * i;
+        if (t + e + 12 > v.byteLength) break;
+        const tag = u16(e), type = u16(e + 2), cnt = u32(e + 4), size = (SZ[type] || 1) * cnt;
+        const d = size > 4 ? u32(e + 8) : e + 8;
+        if (t + d + size > v.byteLength) continue;
+        let val = [];
+        if (type === 2) { for (let k = 0; k < cnt; k++) { const c = v.getUint8(t + d + k); if (c) val.push(String.fromCharCode(c)); } val = val.join('').trim(); }
+        else if (type === 5 || type === 10) for (let k = 0; k < cnt; k++) { const b = u32(d + 8 * k + 4); val.push(b ? u32(d + 8 * k) / b : NaN); }
+        else if (type === 3) for (let k = 0; k < cnt; k++) val.push(u16(d + 2 * k));
+        else if (type === 4) for (let k = 0; k < cnt; k++) val.push(u32(d + 4 * k));
+        else if (type === 11) for (let k = 0; k < cnt; k++) val.push(v.getFloat32(t + d + 4 * k, le));
+        else if (type === 12) for (let k = 0; k < cnt; k++) val.push(v.getFloat64(t + d + 8 * k, le));
+        out[tag] = val;
+      }
+      return out;
+    }
+    const i0 = ifd(u32(4));
+    const gps = i0[0x8825] ? ifd(i0[0x8825][0]) : null;
+    if (!gps || !gps[2] || !gps[4]) return { gps: null };
+    const dec = (a) => (a && a.length === 3 && a.every(Number.isFinite) ? a[0] + a[1] / 60 + a[2] / 3600 : NaN);
+    let lat = dec(gps[2]), lon = dec(gps[4]);
+    if (gps[1] === 'S') lat = -lat;
+    if (gps[3] === 'W') lon = -lon;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) return { gps: null };
+    const acc = gps[0x1F] && Number.isFinite(gps[0x1F][0]) ? gps[0x1F][0] : null;
+    const dir = gps[0x11] && Number.isFinite(gps[0x11][0]) ? gps[0x11][0] : null;
+    return { gps: { lat, lon, acc, dir, dirRef: gps[0x10] || 'T' } };
+  }
+
+  // ---------- Postes sur la carte ----------
+  // Chaque poste garde sa position GPS (lat, lon) ; s'il a été glissé à la main, sa position corrigée (mlat, mlon).
+  const posOf = (p) => (p.moved ? [p.mlat, p.mlon] : [p.lat, p.lon]);
+  const corrOf = (p) => (p.moved ? map.distance([p.lat, p.lon], [p.mlat, p.mlon]) : null);
+  // Sur la carte, le nord est en haut : l'angle affiché est directement la direction par rapport au nord géographique.
+  const angleOf = (p) => (p.angle != null ? p.angle : p.dir == null ? null : norm(p.dir + (p.dirMag ? S.decl : 0)));
+  const layer = L.layerGroup().addTo(map);
+  function icon(p) {
+    const a = angleOf(p), sel = p.id === S.sel, col = sel ? '#2563eb' : '#dc2626';
+    const chev = a == null ? '' : `<g transform="rotate(${a} 22 22)"><path d="M13 20 L22 3 L31 20" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 20 L22 3 L31 20" fill="none" stroke="${col}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+    return L.divIcon({
+      className: 'post-icon' + (sel ? ' sel' : ''), iconSize: [44, 44], iconAnchor: [22, 22],
+      html: `<svg width="44" height="44" viewBox="0 0 44 44" style="overflow:visible">${chev}<circle cx="22" cy="22" r="6" fill="${col}" stroke="#fff" stroke-width="2.5"/></svg><span class="num">${esc(p.num)}</span>`
+    });
+  }
+  function render() {
+    layer.clearLayers();
+    for (const p of S.posts) {
+      if (p.acc) L.circle([p.lat, p.lon], { radius: p.acc, color: '#dc2626', weight: 1.5, opacity: 0.6, fillOpacity: 0.08, interactive: false }).addTo(layer);
+      if (p.moved) {
+        L.polyline([[p.lat, p.lon], [p.mlat, p.mlon]], { color: '#475467', weight: 2, dashArray: '5 5', interactive: false }).addTo(layer);
+        L.circleMarker([p.lat, p.lon], { radius: 4, color: '#475467', fillColor: '#475467', fillOpacity: 1, interactive: false }).addTo(layer);
+      }
+      const m = L.marker(posOf(p), { icon: icon(p), draggable: true, autoPan: true }).addTo(layer);
+      m.on('click', () => { S.sel = p.id; refresh(); });
+      m.on('dragend', () => { const ll = m.getLatLng(); p.moved = true; p.mlat = ll.lat; p.mlon = ll.lng; S.sel = p.id; save(); refresh(); });
+    }
+    if (live.pos) {
+      L.circle([live.pos.lat, live.pos.lon], { radius: live.pos.acc, color: '#2563eb', weight: 1.5, fillOpacity: 0.12, interactive: false }).addTo(layer);
+      L.circleMarker([live.pos.lat, live.pos.lon], { radius: 8, color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1, interactive: false }).addTo(layer);
+    }
+  }
+  function status(id, kind, html) { $(id).innerHTML = html ? `<div class="msg ${kind}">${html}</div>` : ''; }
+  function refresh() {
+    render();
+    const sel = S.posts.find((p) => p.id === S.sel);
+    if (sel) {
+      const a = angleOf(sel), c = corrOf(sel);
+      $('postSel').innerHTML = `<div class="msg info">Poste <strong>${esc(sel.num)}</strong> · ${sel.src === 'photo' ? 'photo ' + esc(sel.photo || '') : 'mesure directe'}` +
+        (sel.acc ? ` · ± ${f1(sel.acc)} m` : '') + (a != null ? ` · direction ${f0(a)}°` : ' · sans direction') +
+        (c != null ? ` · <strong>corrigé de ${f1(c)} m</strong>` : ' · faites-le glisser s’il est mal placé') + `</div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn small" data-rot="-10">↺ 10°</button><button class="btn small" data-rot="10">↻ 10°</button>
+          ${sel.moved || sel.angle != null ? '<button class="btn small" id="pReset">Revenir au GPS</button>' : ''}
+          <button class="btn small" id="pDel">Supprimer</button>
+        </div>`;
+      document.querySelectorAll('[data-rot]').forEach((b) => b.addEventListener('click', () => { sel.angle = norm((angleOf(sel) ?? 0) + Number(b.dataset.rot)); save(); refresh(); }));
+      if ($('pReset')) $('pReset').addEventListener('click', () => { delete sel.moved; delete sel.mlat; delete sel.mlon; delete sel.angle; save(); refresh(); });
+      $('pDel').addEventListener('click', () => { S.posts = S.posts.filter((p) => p !== sel); S.sel = null; save(); refresh(); });
+    } else $('postSel').innerHTML = '';
+    const corrs = S.posts.map(corrOf).filter((c) => c != null);
+    $('postTable').innerHTML = S.posts.length ? `<table><thead><tr><th>N°</th><th>Source</th><th class="n">Précision</th><th class="n">Direction</th><th class="n">Corrigé de</th></tr></thead><tbody>${S.posts.map((p) => {
+      const a = angleOf(p), c = corrOf(p);
+      return `<tr class="${p.id === S.sel ? 'sel' : ''}" data-post="${p.id}"><td><strong>${esc(p.num)}</strong></td><td>${p.src === 'photo' ? 'photo' : 'direct'}</td>` +
+        `<td class="n">${p.acc ? '± ' + f1(p.acc) + ' m' : '—'}</td><td class="n">${a != null ? f0(a) + '°' : '—'}</td><td class="n">${c != null ? f1(c) + ' m' : '—'}</td></tr>`;
+    }).join('')}</tbody></table>` +
+      (corrs.length ? `<p class="note">Correction moyenne : <strong>${f1(corrs.reduce((a, b) => a + b, 0) / corrs.length)} m</strong> sur ${corrs.length} poste${corrs.length > 1 ? 's' : ''} déplacé${corrs.length > 1 ? 's' : ''} (erreur réelle du GPS sur votre terrain) · plus grande : ${f1(Math.max(...corrs))} m.</p>` : '') : '';
+    document.querySelectorAll('[data-post]').forEach((tr) => tr.addEventListener('click', () => {
+      S.sel = tr.dataset.post; refresh();
+      const p = S.posts.find((x) => x.id === S.sel);
+      if (p) map.setView(posOf(p), Math.max(map.getZoom(), 18));
+    }));
+  }
+  function addPost(data) {
+    const num = parseInt($('postNum').value, 10);
+    const p = { id: newId(), num: Number.isFinite(num) ? num : S.posts.length + 1, ...data };
+    S.posts.push(p);
+    $('postNum').value = p.num + 1;
+    S.sel = p.id;
+    save();
+    refresh();
+    map.setView([p.lat, p.lon], Math.max(map.getZoom(), 18));
+  }
+  $('postPhoto').addEventListener('click', () => { $('photoFile').value = ''; $('photoFile').click(); });
+  $('photoFile').addEventListener('change', async () => {
+    const f = $('photoFile').files[0];
+    if (!f) return;
+    let ex = null;
+    try { ex = readExif(await f.arrayBuffer()); } catch (e) { ex = null; }
+    if (!ex || !ex.gps) { status('postStatus', 'warn', `${esc(f.name)} : pas de position dans cette photo. Prenez-la avec l’appareil photo de l’iPhone, puis choisissez-la dans la photothèque.`); return; }
+    const g = ex.gps;
+    addPost({ src: 'photo', photo: f.name, lat: g.lat, lon: g.lon, acc: g.acc, dir: g.dir, dirMag: g.dirRef === 'M' });
+    status('postStatus', 'ok', `Poste posé depuis ${esc(f.name)}` + (g.acc ? ` · précision annoncée ± ${f1(g.acc)} m` : '') + (g.dir != null ? ` · direction ${f0(g.dir)}°` : ' · pas de direction dans la photo'));
+  });
+  $('postHere').addEventListener('click', async () => {
+    if (S.busy) return;
+    S.busy = true;
+    const okCompass = await startCompass();
+    compass.samples = [];
+    try {
+      const m = await measure(10, (left, n, acc) => status('postStatus', 'info', `Mesure en cours… ${Math.ceil(left)} s · ${n} position${n > 1 ? 's' : ''}${acc ? ` · ± ${f1(acc)} m` : ''}. Restez immobile, objectif vers la scène.`));
+      const h = meanHeading(compass.samples.filter((s) => s.t > Date.now() - 6000));
+      compass.samples = null;
+      addPost({ src: 'direct', lat: m.lat, lon: m.lon, acc: m.acc, spread: m.spread, dir: h ? h.h : null, dirMag: true });
+      status('postStatus', 'ok', `Poste mesuré : précision annoncée ± ${f1(m.acc)} m, écart entre mesures ${f1(m.spread)} m (${m.n} mesures)` +
+        (h ? ` · cap ${f0(h.h)}° magnétique${h.upright ? '' : ' (appareil tenu à plat)'}${h.spread > 10 ? ` · cap instable (±${f0(h.spread)}°)` : ''}` : (okCompass ? ' · aucune donnée de boussole' : ' · boussole non autorisée')));
+    } catch (e) { compass.samples = null; status('postStatus', 'warn', esc(e.message)); }
+    S.busy = false;
+  });
+
+  // ---------- « Où suis-je ? » ----------
+  const live = { watch: null, pos: null };
+  $('whereBtn').addEventListener('click', () => {
+    if (live.watch !== null) { navigator.geolocation.clearWatch(live.watch); live.watch = null; live.pos = null; $('whereBtn').setAttribute('aria-pressed', 'false'); $('whereInfo').textContent = ''; render(); return; }
+    if (!navigator.geolocation) { $('whereInfo').textContent = 'Géolocalisation non disponible.'; return; }
+    $('whereBtn').setAttribute('aria-pressed', 'true');
+    $('whereInfo').textContent = 'Recherche de la position…';
+    let first = true;
+    live.watch = navigator.geolocation.watchPosition((pos) => {
+      live.pos = { lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy };
+      $('whereInfo').textContent = `Vous : ± ${f1(live.pos.acc)} m`;
+      if (first) { map.setView([live.pos.lat, live.pos.lon], 18); first = false; }
+      render();
+    }, (err) => { $('whereInfo').textContent = err.code === 1 ? 'Accès à la position refusé.' : 'Position indisponible.'; }, { enableHighAccuracy: true, maximumAge: 0 });
+  });
+
+  $('decl').value = S.decl;
+  $('decl').addEventListener('change', () => { const v = parseFloat(String($('decl').value).replace(',', '.')); if (Number.isFinite(v)) { S.decl = v; save(); refresh(); } });
+  $('resetBtn').addEventListener('click', () => { if (confirm('Effacer tous les postes de cette page sur cet appareil ?')) { S.posts = []; S.sel = null; save(); refresh(); } });
+  $('exportBtn').addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({ decl: S.decl, postes: S.posts.map((p) => ({ ...p, position: posOf(p), direction: angleOf(p), correction_m: corrOf(p) })) }, null, 1)], { type: 'application/json' }));
+    a.download = 'labo_gps_carte.json';
+    a.click();
+  });
+  $('secure').textContent = window.isSecureContext ? '' : '⚠ Page en http : GPS et boussole bloqués (la lecture des photos fonctionne).';
+  refresh();
+</script>
+</body>
+</html>
