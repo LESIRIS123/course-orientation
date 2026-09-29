@@ -46,9 +46,10 @@
   .note { color: var(--muted); font-size: 13px; }
   .hidden { display: none !important; }
   .sel td { background: var(--accent-soft); }
-  .dual { display: grid; gap: 10px; }
+  .dual { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
+  .dual > * { min-width: 0; }
   #gmap { height: 45vh; border-radius: 12px; background: #d9dee6; }
-  @media (min-width: 1000px) { main { max-width: 1500px; } .dual.two { grid-template-columns: 1fr 1fr; } #gmap { height: 58vh; } }
+  @media (min-width: 1000px) { main { max-width: 1500px; } .dual.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } #gmap { height: 58vh; } }
   .cal-icon { background: none; border: 0; }
   .cal-icon span { position: absolute; left: 22px; top: -4px; font: 800 14px system-ui, sans-serif; color: #2563eb; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; }
   label.lbl { display: block; font-size: 13px; font-weight: 700; color: var(--muted); margin: 8px 0 4px; }
@@ -386,21 +387,44 @@
     };
     img.src = url;
   });
-  function setZoom(z, cx, cy) {
-    const old = S.zoom;
-    const px = cx ?? view.clientWidth / 2, py = cy ?? view.clientHeight / 2;
-    const ax = (view.scrollLeft + px) / old, ay = (view.scrollTop + py) / old;
+  // Zoom en gardant sous le pointeur le même point du plan : on défile quand c'est possible,
+  // sinon le plan est décalé par une marge (ox, oy).
+  let ox = 0, oy = 0;
+  function place(z, ax, ay, px, py) {
     S.zoom = Math.max(0.02, Math.min(8, z));
-    stage.style.width = S.W * S.zoom + 'px';
-    stage.style.height = S.H * S.zoom + 'px';
-    view.scrollLeft = ax * S.zoom - px;
-    view.scrollTop = ay * S.zoom - py;
+    const w = S.W * S.zoom, h = S.H * S.zoom, cw = view.clientWidth, ch = view.clientHeight;
+    stage.style.width = w + 'px';
+    stage.style.height = h + 'px';
+    // Décalage voulu du bord du plan : positif → marge ; négatif → défilement.
+    const dx = px - ax * S.zoom, dy = py - ay * S.zoom;
+    ox = dx > 0 ? Math.min(dx, cw - 40) : 0;
+    oy = dy > 0 ? Math.min(dy, ch - 40) : 0;
+    stage.style.marginLeft = ox + 'px';
+    stage.style.marginTop = oy + 'px';
+    view.scrollLeft = dx < 0 ? -dx : 0;
+    view.scrollTop = dy < 0 ? -dy : 0;
     render();
   }
-  function zoomFit() { if (S.W) { S.zoom = 1; setZoom(Math.min(view.clientWidth / S.W, view.clientHeight / S.H)); view.scrollLeft = 0; view.scrollTop = 0; } }
+  function setZoom(z, cx, cy) {
+    const px = cx ?? view.clientWidth / 2, py = cy ?? view.clientHeight / 2;
+    place(z, (view.scrollLeft + px - ox) / S.zoom, (view.scrollTop + py - oy) / S.zoom, px, py);
+  }
+  // Plan entier, centré dans la fenêtre.
+  function zoomFit() {
+    if (!S.W) return;
+    const cw = view.clientWidth, ch = view.clientHeight;
+    place(Math.min(cw / S.W, ch / S.H), S.W / 2, S.H / 2, cw / 2, ch / 2);
+  }
   $('zIn').addEventListener('click', () => setZoom(S.zoom * 1.6));
   $('zOut').addEventListener('click', () => setZoom(S.zoom / 1.6));
   $('zFit').addEventListener('click', zoomFit);
+  // Molette de la souris : zoom centré sur le pointeur (comme sur la photo aérienne).
+  view.addEventListener('wheel', (e) => {
+    if (!S.W) return;
+    e.preventDefault();
+    const r = view.getBoundingClientRect();
+    setZoom(S.zoom * (e.deltaY < 0 ? 1.25 : 0.8), e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
   function centerOn(x, y) { view.scrollLeft = x * S.zoom - view.clientWidth / 2; view.scrollTop = y * S.zoom - view.clientHeight / 2; }
 
   stage.addEventListener('click', (e) => {
