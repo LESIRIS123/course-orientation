@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Labo GPS sur plan</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
   :root { --bg: #eef1f5; --panel: #fff; --text: #1d2939; --muted: #667085; --line: #d0d5dd; --accent: #2563eb; --accent-soft: #eff4ff;
     --ok: #067647; --okbg: #ecfdf3; --warn: #b54708; --warnbg: #fffaeb; --bad: #b42318; }
@@ -44,6 +46,11 @@
   .note { color: var(--muted); font-size: 13px; }
   .hidden { display: none !important; }
   .sel td { background: var(--accent-soft); }
+  .dual { display: grid; gap: 10px; }
+  #gmap { height: 45vh; border-radius: 12px; background: #d9dee6; }
+  @media (min-width: 1000px) { main { max-width: 1500px; } .dual.two { grid-template-columns: 1fr 1fr; } #gmap { height: 58vh; } }
+  .cal-icon { background: none; border: 0; }
+  .cal-icon span { position: absolute; left: 22px; top: -4px; font: 800 14px system-ui, sans-serif; color: #2563eb; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; }
   label.lbl { display: block; font-size: 13px; font-weight: 700; color: var(--muted); margin: 8px 0 4px; }
 </style>
 </head>
@@ -62,10 +69,16 @@
     <p class="note" id="planInfo">Chargez l’image du plan (JPG ou PNG). Le calage et les postes sont gardés sur cet appareil pour ce plan.</p>
   </div>
 
+  <div class="dual" id="dual">
   <div id="wrap">
     <div id="view"><div id="stage"><img id="plan" alt=""><svg id="ov" xmlns="http://www.w3.org/2000/svg"></svg></div></div>
     <div class="zoombar"><button class="btn" id="zOut" aria-label="Dézoomer">−</button><button class="btn" id="zIn" aria-label="Zoomer">+</button><button class="btn" id="zFit">Ajuster</button></div>
     <svg id="north" viewBox="-22 -22 44 44"><g id="northG"><path d="M0 -17 L6 4 L0 0 L-6 4 Z" fill="#b42318"/><text y="16" text-anchor="middle" font-size="11" font-weight="800" fill="#1d2939">N</text></g></svg>
+  </div>
+  <div id="mapBox" class="hidden">
+    <div id="gmap"></div>
+    <div class="row" style="margin-top:6px"><input class="txt grow" id="placeQ" placeholder="Chercher un lieu (ex. Parc Palmer, Cenon)" style="min-height:40px"><button class="btn small" id="placeGo">Chercher</button></div>
+  </div>
   </div>
   <p class="note" id="hint" style="margin:6px 2px 12px"></p>
 
@@ -73,7 +86,7 @@
 
   <section class="card" data-panel="cal">
     <h2>Calage du plan</h2>
-    <p class="note">Touchez « Ajouter un point », puis un endroit <strong>reconnaissable</strong> sur le plan (angle de bâtiment, croisement d’allées, portail). Donnez ensuite ses coordonnées : mesurées sur place, ou copiées depuis Google Maps (appui long sur la carte, puis touchez les chiffres pour les copier). 3 ou 4 points bien écartés, aux quatre coins du terrain de préférence.</p>
+    <p class="note">Touchez « Ajouter un point », puis un endroit <strong>reconnaissable</strong> sur votre plan (angle de bâtiment, croisement d’allées, portail), puis <strong>le même endroit sur la photo aérienne</strong> : c’est le plus précis, et ça se fait au bureau. Autres possibilités : mesurer sur place, ou coller des coordonnées (Google Maps : appui long sur la carte). 4 à 6 points bien écartés, aux quatre coins du terrain.</p>
     <div class="row"><button class="btn primary grow" id="calAdd">Ajouter un point de calage</button></div>
     <div id="calPending" class="hidden" style="margin-top:10px">
       <div class="msg info" id="calPendingMsg"></div>
@@ -165,6 +178,74 @@
   }
   // Angle sur le plan (0 = vers le haut, sens horaire) d'une direction donnée par rapport au nord géographique.
   const planAngle = (bearing) => norm(Math.atan2(T.A * Math.sin(bearing * R) - T.B * Math.cos(bearing * R), T.B * Math.sin(bearing * R) + T.A * Math.cos(bearing * R)) / R);
+
+  // Inverse : pixel du plan → coordonnées GPS.
+  function pxToGeo(x, y) {
+    const dX = x - T.C, dY = -y - T.D, k = T.A * T.A + T.B * T.B;
+    const E = (T.A * dX + T.B * dY) / k, N = (-T.B * dX + T.A * dY) / k;
+    return { lat: T.o.lat + N / M_LAT, lon: T.o.lon + E / mLon(T.o.lat) };
+  }
+
+  // ---------- Photo aérienne à côté du plan (calage au bureau) ----------
+  let gmap = null, gLayer = null;
+  function ensureMap() {
+    if (gmap || typeof L === 'undefined') return;
+    const ign = (layer, fmt) => `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${layer}&STYLE=normal&TILEMATRIXSET=PM&FORMAT=${fmt}&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}`;
+    const layers = {
+      'Photo aérienne (IGN)': L.tileLayer(ign('ORTHOIMAGERY.ORTHOPHOTOS', 'image/jpeg'), { maxNativeZoom: 19, maxZoom: 21, attribution: '© IGN' }),
+      'Plan IGN': L.tileLayer(ign('GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2', 'image/png'), { maxNativeZoom: 18, maxZoom: 21, attribution: '© IGN' }),
+      'OpenStreetMap': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxNativeZoom: 19, maxZoom: 21, attribution: '© contributeurs OpenStreetMap' })
+    };
+    gmap = L.map('gmap');
+    layers['Photo aérienne (IGN)'].addTo(gmap);
+    L.control.layers(layers, null, { collapsed: true }).addTo(gmap);
+    L.control.scale({ imperial: false }).addTo(gmap);
+    gLayer = L.layerGroup().addTo(gmap);
+    let v = null;
+    try { v = JSON.parse(localStorage.getItem('labo-gps-plan-vue') || 'null'); } catch (e) { v = null; }
+    const pts = S.cal.filter((c) => Number.isFinite(c.lat));
+    if (pts.length >= 2) gmap.fitBounds(pts.map((c) => [c.lat, c.lon]), { padding: [30, 30] });
+    else if (v) gmap.setView(v.c, v.z);
+    else gmap.setView([44.84, -0.55], 13);
+    gmap.on('moveend', () => { const c = gmap.getCenter(); try { localStorage.setItem('labo-gps-plan-vue', JSON.stringify({ c: [c.lat, c.lng], z: gmap.getZoom() })); } catch (e) { /* ignoré */ } });
+    gmap.on('click', (e) => {
+      if (S.mode === 'cal-coords' && S.pendingCal) {
+        addCal({ lat: e.latlng.lat, lon: e.latlng.lng, src: 'carte' });
+        if (S.cal.length < 3) status('calStatus', 'ok', `Point C${S.cal.length} enregistré. Continuez : il faut au moins 3 points pour vérifier le calage.`);
+      } else status('calStatus', 'info', 'Touchez d’abord « Ajouter un point », puis l’endroit sur votre plan ; ensuite seulement, le même endroit ici.');
+    });
+  }
+  function renderMap() {
+    if (!gmap) return;
+    gLayer.clearLayers();
+    S.cal.forEach((c, i) => {
+      if (!Number.isFinite(c.lat)) return;
+      L.marker([c.lat, c.lon], { interactive: false, icon: L.divIcon({ className: 'cal-icon', iconSize: [30, 30], iconAnchor: [15, 15],
+        html: '<svg width="30" height="30" viewBox="0 0 30 30"><g stroke="#fff" stroke-width="5" fill="none"><circle cx="15" cy="15" r="8"/><path d="M0 15H30M15 0V30"/></g><g stroke="#2563eb" stroke-width="2.5" fill="none"><circle cx="15" cy="15" r="8"/><path d="M0 15H30M15 0V30"/></g></svg><span>C' + (i + 1) + '</span>' }) }).addTo(gLayer);
+    });
+    if (S.pendingCal && T) {
+      const g = pxToGeo(S.pendingCal.x, S.pendingCal.y);
+      L.circle([g.lat, g.lon], { radius: 6, color: '#2563eb', weight: 2, dashArray: '4 4', fillOpacity: 0.1, interactive: false }).addTo(gLayer);
+    }
+    for (const p of S.posts) {
+      if (!Number.isFinite(p.lat)) continue;
+      const g = p.moved && T ? pxToGeo(p.x, p.y) : { lat: p.lat, lon: p.lon };
+      L.circleMarker([g.lat, g.lon], { radius: 5, color: '#fff', weight: 2, fillColor: '#dc2626', fillOpacity: 1, interactive: false }).addTo(gLayer);
+    }
+    if (S.live) L.circleMarker([S.live.lat, S.live.lon], { radius: 7, color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1, interactive: false }).addTo(gLayer);
+  }
+  async function searchPlace() {
+    const q = $('placeQ').value.trim();
+    if (!q || !gmap) return;
+    try {
+      const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=fr&q=' + encodeURIComponent(q));
+      const d = await r.json();
+      if (!d.length) { status('calStatus', 'warn', 'Lieu introuvable : essayez avec le nom de la commune.'); return; }
+      gmap.setView([Number(d[0].lat), Number(d[0].lon)], 17);
+    } catch (e) { status('calStatus', 'warn', 'Recherche impossible (pas de réseau ?).'); }
+  }
+  $('placeGo').addEventListener('click', searchPlace);
+  $('placeQ').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchPlace(); });
 
   // ---------- Capteurs : GPS (moyenne) et boussole ----------
   function measure(seconds, onTick) {
@@ -299,6 +380,7 @@
       $('planInfo').textContent = `${f.name} · ${S.W} × ${S.H} px` + (S.cal.length || S.posts.length ? ` · calage et postes retrouvés (${S.cal.length} point${S.cal.length > 1 ? 's' : ''}, ${S.posts.length} poste${S.posts.length > 1 ? 's' : ''})` : '');
       $('whereBtn').disabled = false;
       $('decl').value = S.decl;
+      showTab(S.tab);
       zoomFit();
       refresh();
     };
@@ -329,6 +411,7 @@
       S.pendingCal = { x, y };
       S.mode = 'cal-coords';
       refresh();
+      if (gmap && T) { const g = pxToGeo(x, y); gmap.setView([g.lat, g.lon], Math.max(gmap.getZoom(), 18)); }
       return;
     }
     if (S.mode === 'move-post') {
@@ -453,6 +536,7 @@
     liveWatch = navigator.geolocation.watchPosition((pos) => {
       S.live = { lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy };
       render();
+      renderMap();
       if (first && T) { const q = geoToPx(S.live.lat, S.live.lon); centerOn(q.x, q.y); first = false; }
       $('hint').textContent = `Vous : ± ${f1(S.live.acc)} m` + (T ? '' : ' · faites le calage pour vous voir sur le plan');
     }, (err) => { $('hint').textContent = err.code === 1 ? 'Accès à la position refusé.' : 'Position indisponible.'; }, { enableHighAccuracy: true, maximumAge: 0 });
@@ -464,6 +548,14 @@
     S.tab = tab;
     document.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.tab === tab));
     document.querySelectorAll('[data-panel]').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== tab));
+    // Photo aérienne affichée seulement pendant le calage.
+    const withMap = tab === 'cal' && !!S.W;
+    $('mapBox').classList.toggle('hidden', !withMap);
+    $('dual').classList.toggle('two', withMap);
+    if (withMap) {
+      ensureMap();
+      setTimeout(() => { if (gmap) { gmap.invalidateSize(); renderMap(); } if (S.W) zoomFit(); }, 60);
+    } else if (S.W) setTimeout(zoomFit, 60);
   }
   document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
   $('decl').addEventListener('change', () => { const v = parseFloat(String($('decl').value).replace(',', '.')); if (Number.isFinite(v)) { S.decl = v; save(); refresh(); } });
@@ -516,6 +608,7 @@
   function refresh() {
     fit();
     render();
+    renderMap();
     // Consigne sous le plan
     $('hint').textContent = !S.W ? 'Chargez d’abord un plan.'
       : S.mode === 'cal-pick' ? '👉 Touchez sur le plan l’endroit reconnaissable (zoomez pour être précis).'
@@ -524,7 +617,7 @@
     // Calage
     const pend = S.mode === 'cal-coords' && S.pendingCal;
     $('calPending').classList.toggle('hidden', !pend);
-    if (pend) $('calPendingMsg').textContent = `Point C${S.cal.length + 1} placé sur le plan. Donnez maintenant ses coordonnées :`;
+    if (pend) $('calPendingMsg').textContent = `Point C${S.cal.length + 1} placé sur le plan. Touchez maintenant le même endroit sur la photo aérienne` + (T ? ' (elle est centrée sur l’endroit prévu, cercle pointillé)' : '') + ', ou donnez ses coordonnées :';
     const n = S.cal.length;
     if (!S.busy) {
       if (n < 2) status('calStatus', 'info', `${n} point${n > 1 ? 's' : ''} de calage : il en faut au moins 2 pour placer quoi que ce soit, 3 ou 4 pour vérifier le calage.`);
@@ -537,7 +630,7 @@
       }
     }
     $('calTable').innerHTML = n ? `<table><thead><tr><th>Point</th><th>Coordonnées</th><th>Source</th><th class="n">Écart</th><th></th></tr></thead><tbody>${S.cal.map((c, i) =>
-      `<tr><td><strong>C${i + 1}</strong></td><td>${c.lat.toFixed(6)}, ${c.lon.toFixed(6)}</td><td>${c.src === 'mesure' ? `mesure ± ${f1(c.acc)} m` : 'saisie'}</td>` +
+      `<tr><td><strong>C${i + 1}</strong></td><td>${c.lat.toFixed(6)}, ${c.lon.toFixed(6)}</td><td>${c.src === 'mesure' ? `mesure ± ${f1(c.acc)} m` : c.src === 'carte' ? 'photo aérienne' : 'saisie'}</td>` +
       `<td class="n">${c.res != null ? `<strong style="color:${c.res > 8 ? 'var(--warn)' : 'var(--ok)'}">${f1(c.res)} m</strong>` : '—'}</td>` +
       `<td class="n"><button class="btn small" data-delcal="${c.id}">Suppr.</button></td></tr>`).join('')}</tbody></table>` +
       '<p class="note">Écart = distance entre le point touché sur le plan et la position que le calage calcule pour ses coordonnées (trait orange). Au-delà de 5 à 8 m, un point est probablement mal placé.</p>' : '';
