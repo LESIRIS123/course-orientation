@@ -59,6 +59,7 @@
       <div><div class="lbl">Moyenne des mesures</div><div class="big" id="gpsAvgAcc">—</div><div class="note" id="gpsAvg"></div></div>
       <div><div class="lbl" id="headLbl">Cap</div><div class="big" id="head">—</div><div class="note" id="headNote"></div></div>
     </div>
+    <p class="note" id="diag" style="background:#f9fafb;border-radius:10px;padding:8px 10px"></p>
     <p class="note">La « précision annoncée » est l’estimation de l’appareil lui-même : la vraie erreur peut être plus grande, surtout sous les arbres et près des bâtiments. Pour la vérifier, placez-vous sur un point précis (angle de bâtiment, croisement d’allées) et comparez sur la carte.</p>
   </section>
 </main>
@@ -183,6 +184,34 @@
   $('secure').textContent = window.isSecureContext
     ? 'Page sécurisée (https ou fichier local) : le navigateur peut donner accès au GPS et à la boussole ; il vous demandera l’autorisation.'
     : 'Page ouverte en http : le navigateur bloque le GPS et la boussole. Cette partie ne fonctionnera qu’en https.';
+  // ---------- Diagnostic : navigateur, page sécurisée, autorisation de position, capteurs reçus ----------
+  const diag = { pos: '?', ori: 'non testée' };
+  function browserName() {
+    const ua = navigator.userAgent;
+    if (/DuckDuckGo/i.test(ua)) return 'DuckDuckGo';
+    if (/SamsungBrowser/i.test(ua)) return 'Samsung Internet';
+    if (/EdgA?\//i.test(ua)) return 'Edge';
+    if (/Firefox|FxiOS/i.test(ua)) return 'Firefox';
+    if (/OPR\//i.test(ua)) return 'Opera';
+    if (/HonorBrowser|HuaweiBrowser/i.test(ua)) return 'navigateur Honor/Huawei';
+    if (/; wv\)/.test(ua)) return 'navigateur intégré à une appli (WebView)';
+    if (/Chrome\//i.test(ua)) return 'Chrome';
+    if (/Safari/i.test(ua)) return 'Safari';
+    return 'inconnu';
+  }
+  function showDiag() {
+    $('diag').innerHTML = `<strong>Diagnostic</strong> · navigateur : ${esc(browserName())} · page sécurisée : ${window.isSecureContext ? 'oui' : '<strong>non</strong>'}` +
+      ` · autorisation de position : ${esc(diag.pos)} · boussole : ${esc(diag.ori)}<br><span style="font-size:11px">${esc(navigator.userAgent)}</span>`;
+  }
+  const POS = { granted: 'accordée', denied: 'REFUSÉE (réglages du site ou du téléphone)', prompt: 'pas encore demandée' };
+  if (navigator.permissions && navigator.permissions.query) {
+    navigator.permissions.query({ name: 'geolocation' }).then((st) => {
+      diag.pos = POS[st.state] || st.state; showDiag();
+      st.onchange = () => { diag.pos = POS[st.state] || st.state; showDiag(); };
+    }).catch(() => { diag.pos = 'inconnue'; showDiag(); });
+  }
+  showDiag();
+
   let watch = null, samples = [];
   $('gpsBtn').addEventListener('click', () => {
     if (watch !== null) { navigator.geolocation.clearWatch(watch); watch = null; $('gpsBtn').textContent = 'Mesurer la position (restez immobile)'; return; }
@@ -203,7 +232,9 @@
       $('gpsAvgAcc').textContent = Number.isFinite(spread) ? `± ${f1(spread)} m` : '—';
       $('gpsAvg').innerHTML = `${la.toFixed(6)}, ${lo.toFixed(6)} · ${samples.length} mesures (écart entre mesures) · <a href="https://www.openstreetmap.org/?mlat=${la}&mlon=${lo}#map=19/${la}/${lo}" target="_blank" rel="noopener">carte</a>`;
     }, (err) => {
-      $('gpsLast').textContent = err.code === 1 ? 'Accès à la position refusé (ou page en http).' : 'Position indisponible : ' + err.message;
+      $('gpsLast').textContent = err.code === 1
+        ? 'Accès à la position refusé : autorisez la position pour ce site (cadenas › Autorisations) et pour le navigateur (Paramètres du téléphone › Applications).'
+        : err.code === 3 ? 'Pas de position au bout de 30 s : localisation du téléphone activée ? Essayez dehors.' : 'Position indisponible : ' + err.message;
     }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
   });
 
@@ -214,12 +245,15 @@
         if (await DeviceOrientationEvent.requestPermission() !== 'granted') { $('headNote').textContent = 'Accès à la boussole refusé.'; return; }
       }
     } catch (e) { $('headNote').textContent = 'Boussole bloquée (page en http ?).'; return; }
-    let got = false;
-    const show = (h, note) => { got = true; $('head').textContent = `${Math.round((h + 360) % 360)}°`; $('headNote').textContent = note; };
+    let got = false, gotAbs = false;
+    diag.ori = 'en attente…'; showDiag();
+    const show = (h, note) => { if (!got) { diag.ori = 'reçue'; showDiag(); } got = true; $('head').textContent = `${Math.round((h + 360) % 360)}°`; $('headNote').textContent = note; };
     window.addEventListener('deviceorientation', (e) => {
+      // Certains navigateurs n'envoient pas « deviceorientationabsolute » mais marquent l'événement comme absolu.
+      if (!gotAbs && e.absolute === true && e.alpha !== null) { onAbs(e); return; }
       if (typeof e.webkitCompassHeading === 'number') show(e.webkitCompassHeading, e.webkitCompassAccuracy >= 0 ? `précision ± ${Math.round(e.webkitCompassAccuracy)}°` : 'boussole à étalonner (faites un 8 avec l’appareil)');
     });
-    window.addEventListener('deviceorientationabsolute', (e) => {
+    const onAbs = (e) => {
       if (e.alpha === null) return;
       // Matrice de rotation de l'appareil (axes : x est, y nord, z vers le haut). Tenu droit, on prend
       // la direction de l'objectif arrière (axe −z de l'appareil) ; posé à plat, celle du haut de l'écran.
@@ -230,8 +264,13 @@
       const upright = Math.abs(zz) < 0.7;
       $('headLbl').textContent = upright ? 'Direction de l’objectif (appareil tenu droit)' : 'Cap du haut de l’écran (appareil à plat)';
       show(upright ? Math.atan2(-zx, -zy) / r : 360 - e.alpha, 'nord magnétique · éloignez-vous du métal et des aimants (housse)');
-    });
-    setTimeout(() => { if (!got) $('headNote').textContent = 'Aucune donnée de boussole (appareil sans boussole, ou page en http).'; }, 3000);
+    };
+    window.addEventListener('deviceorientationabsolute', (e) => { gotAbs = true; onAbs(e); });
+    setTimeout(() => {
+      if (got) return;
+      diag.ori = 'aucune donnée reçue'; showDiag();
+      $('headNote').textContent = 'Aucune donnée de boussole : essayez avec Chrome (certains navigateurs ne transmettent pas la boussole aux pages).';
+    }, 3000);
   });
 </script>
 </body>
