@@ -1261,7 +1261,7 @@
     'use strict';
 
     const $ = (id) => document.getElementById(id);
-    const APP_VERSION = '2026-09-30-10'; // version test ← à incrémenter à chaque nouvelle mise en ligne
+    const APP_VERSION = '2026-09-30-11'; // version test ← à incrémenter à chaque nouvelle mise en ligne
     const SVGNS = 'http://www.w3.org/2000/svg';
     const MAX_PIXELS = 16000000; // limite de taille des canvas sur iOS
     const TAP_SLOP = 8;          // déplacement (px) en dessous duquel un toucher reste un « tap »
@@ -4286,8 +4286,8 @@
           plan: L.tileLayer(mkTileUrl('plan', '{z}', '{x}', '{y}'), { maxNativeZoom: 18, maxZoom: 20, attribution: '© IGN' }),
           osm: L.tileLayer(mkTileUrl('osm', '{z}', '{x}', '{y}'), { maxNativeZoom: 19, maxZoom: 20, attribution: '© contributeurs OpenStreetMap' })
         };
-        // Zoom par quarts de niveau (un niveau entier double la zone) pour ajuster finement le cadre.
-        MK.map = L.map('mkMap', { zoomControl: true, zoomSnap: 0.25, zoomDelta: 0.25, wheelPxPerZoomLevel: 120 });
+        // Zoom par dixièmes de niveau (≈ 7 % par clic ; un niveau entier double la zone) pour ajuster finement le cadre.
+        MK.map = L.map('mkMap', { zoomControl: true, zoomSnap: 0.1, zoomDelta: 0.1, wheelPxPerZoomLevel: 120 });
         MK.layers[MK.source].addTo(MK.map);
         L.control.scale({ imperial: false }).addTo(MK.map);
         let v = null;
