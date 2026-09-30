@@ -1261,7 +1261,7 @@
     'use strict';
 
     const $ = (id) => document.getElementById(id);
-    const APP_VERSION = '2026-09-30-9'; // version test ← à incrémenter à chaque nouvelle mise en ligne
+    const APP_VERSION = '2026-09-30-10'; // version test ← à incrémenter à chaque nouvelle mise en ligne
     const SVGNS = 'http://www.w3.org/2000/svg';
     const MAX_PIXELS = 16000000; // limite de taille des canvas sur iOS
     const TAP_SLOP = 8;          // déplacement (px) en dessous duquel un toucher reste un « tap »
@@ -4286,7 +4286,8 @@
           plan: L.tileLayer(mkTileUrl('plan', '{z}', '{x}', '{y}'), { maxNativeZoom: 18, maxZoom: 20, attribution: '© IGN' }),
           osm: L.tileLayer(mkTileUrl('osm', '{z}', '{x}', '{y}'), { maxNativeZoom: 19, maxZoom: 20, attribution: '© contributeurs OpenStreetMap' })
         };
-        MK.map = L.map('mkMap', { zoomControl: true });
+        // Zoom par quarts de niveau (un niveau entier double la zone) pour ajuster finement le cadre.
+        MK.map = L.map('mkMap', { zoomControl: true, zoomSnap: 0.25, zoomDelta: 0.25, wheelPxPerZoomLevel: 120 });
         MK.layers[MK.source].addTo(MK.map);
         L.control.scale({ imperial: false }).addTo(MK.map);
         let v = null;
@@ -4332,13 +4333,13 @@
     // des textes (OpenStreetMap, Plan IGN) destinés à l'impression, on vise ~140 ppp à la taille du papier :
     // plus fin, les noms de rues deviendraient illisibles une fois imprimés.
     function mkZoom(f) {
-      const zc = MK.map.getZoom(), fmt = $('mkFormat').value;
+      const zc = MK.map.getZoom(), zi = Math.floor(zc), fmt = $('mkFormat').value; // zoom affiché : peut être fractionnaire
       const size = (z) => ({ z, px: Math.round(f.w * Math.pow(2, z - zc)), py: Math.round(f.h * Math.pow(2, z - zc)) });
-      let z = Math.min(MK_SOURCES[MK.source].max, zc + 3);
-      while (z > zc && size(z).px * size(z).py > MK_MAX_PX) z--;
+      let z = Math.min(MK_SOURCES[MK.source].max, zi + 3); // niveau des images : toujours entier
+      while (z > zi && size(z).px * size(z).py > MK_MAX_PX) z--;
       if (MK.source !== 'ortho' && fmt !== 'ecran') {
         const target = (fmt === 'paysage' ? 27.7 : 19) / 2.54 * 140;
-        while (z > Math.max(1, zc - 3) && Math.abs(size(z - 1).px - target) < Math.abs(size(z).px - target)) z--;
+        while (z > Math.max(1, zi - 3) && Math.abs(size(z - 1).px - target) < Math.abs(size(z).px - target)) z--;
       }
       return size(z);
     }
@@ -4354,7 +4355,7 @@
       const fmt = $('mkFormat').value;
       const paper = fmt === 'paysage' ? [27.7, 19] : [19, 27.7];
       const sc = Math.max(wm / paper[0], hm / paper[1]) * 100;
-      const nice = [500, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 7500, 10000, 15000, 20000].find((v) => v >= sc) || Math.round(sc);
+      const nice = (Math.round(sc / 50) * 50 || 50).toLocaleString('fr-FR');
       $('mkInfo').innerHTML = `Zone : <strong>${Math.round(wm)} × ${Math.round(hm)} m</strong> · plan de ${zz.px} × ${zz.py} px` +
         (fmt !== 'ecran' ? ` · imprimé en A4, environ <strong>1/${nice}</strong>` : '') +
         (tooBig ? ' · <span class="ss-warn">zone trop grande pour ce niveau de détail : zoomez un peu</span>' : '');
