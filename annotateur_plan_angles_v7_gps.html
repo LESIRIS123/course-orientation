@@ -190,8 +190,19 @@
     .mk-frame { position: absolute; z-index: 500; pointer-events: none; border: 3px solid #2563eb; border-radius: 4px; box-shadow: 0 0 0 9999px rgba(15, 23, 42, .28); }
     .mk-clip { position: absolute; inset: 0; overflow: hidden; border-radius: 12px; pointer-events: none; z-index: 500; }
     a.btn { text-decoration: none; color: inherit; }
-    .menu-sub { margin: 12px 10px 4px; font-size: 13px; font-weight: 800; color: var(--accent); }
-    .menu-sub span, .menu-note { font-weight: 600; color: var(--muted); font-size: 12px; margin-left: 4px; }
+    /* Menu repensé : une ligne = icône + intitulé court + précision en dessous, alignés à gauche */
+    .menu-project { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 2px 2px 6px; }
+    .menu-project .btn { flex-direction: column; gap: 3px; min-height: 58px; padding: 6px 4px; font-size: 12.5px; font-weight: 600; }
+    .menu-project .btn.danger-text { color: var(--danger); }
+    .menu h3 .step { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-right: 7px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; letter-spacing: 0; }
+    .menu h3 #markerCount { text-transform: none; letter-spacing: 0; font-weight: 600; }
+    .menu .btn.block.mi { min-height: 50px; padding: 6px 12px; text-align: left; }
+    .menu .btn.mi > span { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+    .menu .btn.mi b { font-weight: 600; }
+    .menu .btn.mi small { font-size: 12px; font-weight: 500; color: var(--muted); margin-top: 2px; }
+    .menu .btn.mi.needs-geo { opacity: .45; }
+    .menu .btn.mi.geo-ok small { color: #067647; font-weight: 700; }
+    .menu-sub { margin: 10px 12px 2px; font-size: 12px; font-weight: 700; color: var(--accent); }
     .dock-gps {
       left: calc(12px + var(--sl)); top: 12px;
       gap: 2px; padding: 4px; background: var(--panel); border-radius: 14px; box-shadow: var(--shadow);
@@ -842,29 +853,27 @@
   <!-- Menu -->
   <div class="backdrop" id="backdrop" hidden></div>
   <nav class="menu" id="menu" hidden aria-label="Menu">
-    <h3>Fichiers <span id="markerCount"></span></h3>
-    <button class="btn block" data-action="openPlan"><svg class="i"><use href="#i-file"/></svg>Charger un plan (PDF / image)</button>
-    <button class="btn block" data-action="makePlan"><svg class="i"><use href="#i-globe"/></svg>Créer un plan depuis une carte en ligne <span class="menu-note">IGN, OpenStreetMap</span></button>
-    <button class="btn block" data-action="oomap"><svg class="i"><use href="#i-new"/></svg>Carte de CO depuis OpenStreetMap <span class="menu-note">site externe</span></button>
-    <button class="btn block" data-action="openProject"><svg class="i"><use href="#i-folder"/></svg>Ouvrir un projet (.json)</button>
-    <button class="btn block" data-action="saveProject" data-needs-plan><svg class="i"><use href="#i-save"/></svg>Enregistrer le projet (.json)</button>
-    <button class="btn block danger-text" data-action="newProject" data-needs-plan><svg class="i"><use href="#i-new"/></svg>Nouveau projet (fermer le plan)</button>
-    <hr />
-    <h3>Placer les balises</h3>
-    <button class="btn block" data-action="placeStart" data-needs-plan><svg class="i"><use href="#i-start"/></svg>Placer le départ / arrivée</button>
-    <div class="menu-sub">Avec GPS et boussole <span>sur le terrain</span></div>
-    <button class="btn block" data-action="geoCalib" data-needs-plan><svg class="i"><use href="#i-globe"/></svg>1. Caler la carte <span class="menu-note">une fois, au bureau</span></button>
-    <button class="btn block" data-action="geoPhotos" data-needs-plan><svg class="i"><use href="#i-camera"/></svg>2. Postes depuis des photos</button>
-    <button class="btn block" data-action="geoHere" data-needs-plan><svg class="i"><use href="#i-pin"/></svg>Poste ici <span class="menu-note">mesure sur place</span></button>
-    <button class="btn block" data-action="geoWhere" data-needs-plan><svg class="i"><use href="#i-target"/></svg>Où suis-je ?</button>
-    <p class="info-box" style="display:block">Calez la carte une fois (un point sur la carte, le même sur la photo aérienne, 4 à 6 fois). Sur le terrain, prenez chaque photo avec l’appareil photo de l’iPhone / iPad, puis « Postes depuis des photos » : chaque poste est posé avec son angle. Vérifiez et faites glisser si besoin.</p>
-    <div class="menu-sub">À la main <span>sur le plan</span></div>
-    <button class="btn block" data-action="manualPlace" data-needs-plan><svg class="i"><use href="#i-hand"/></svg>Poser les postes en touchant le plan</button>
-    <hr />
-    <h3>Séances et exports</h3>
-    <button class="btn block" data-action="sessions" data-needs-plan><svg class="i"><use href="#i-timer"/></svg>Séances : groupes, chronos, classement</button>
-    <button class="btn block" data-action="exportHtml" data-needs-plan><svg class="i"><use href="#i-globe"/></svg>Exporter la carte interactive (.html)</button>
-    <button class="btn block" data-action="exportPng" data-needs-plan><svg class="i"><use href="#i-image"/></svg>Exporter en PNG</button>
+    <div class="menu-project">
+      <button class="btn" data-action="openProject" title="Ouvrir un projet (.json)"><svg class="i"><use href="#i-folder"/></svg>Ouvrir</button>
+      <button class="btn" data-action="saveProject" data-needs-plan title="Enregistrer le projet (.json)"><svg class="i"><use href="#i-save"/></svg>Enregistrer</button>
+      <button class="btn danger-text" data-action="newProject" data-needs-plan title="Nouveau projet (fermer le plan)"><svg class="i"><use href="#i-new"/></svg>Nouveau</button>
+    </div>
+    <h3><span><b class="step">1</b>Le plan</span></h3>
+    <button class="btn block mi" data-action="openPlan"><svg class="i"><use href="#i-file"/></svg><span><b>Charger un plan</b><small>PDF, photo ou image</small></span></button>
+    <button class="btn block mi" data-action="makePlan"><svg class="i"><use href="#i-globe"/></svg><span><b>Créer un plan</b><small>depuis une carte en ligne, sans PDF</small></span></button>
+    <h3><span><b class="step">2</b>Les postes</span><span id="markerCount"></span></h3>
+    <button class="btn block mi" data-action="placeStart" data-needs-plan><svg class="i"><use href="#i-start"/></svg><span><b>Départ / arrivée</b><small>à placer en premier</small></span></button>
+    <div class="menu-sub">Sur le terrain, avec le GPS</div>
+    <button class="btn block mi" data-action="geoCalib" data-needs-plan><svg class="i"><use href="#i-globe"/></svg><span><b>Caler la carte</b><small id="geoCalibState">à faire une fois, avant le terrain</small></span></button>
+    <button class="btn block mi" data-action="geoPhotos" data-needs-plan data-needs-geo><svg class="i"><use href="#i-camera"/></svg><span><b>Postes depuis des photos</b><small>prises avec l’appareil photo</small></span></button>
+    <button class="btn block mi" data-action="geoHere" data-needs-plan data-needs-geo><svg class="i"><use href="#i-pin"/></svg><span><b>Poste ici</b><small>GPS + boussole, sur place</small></span></button>
+    <button class="btn block mi" data-action="geoWhere" data-needs-plan data-needs-geo><svg class="i"><use href="#i-target"/></svg><span><b>Où suis-je ?</b><small>votre position sur le plan</small></span></button>
+    <div class="menu-sub">À la main</div>
+    <button class="btn block mi" data-action="manualPlace" data-needs-plan><svg class="i"><use href="#i-hand"/></svg><span><b>Poser en touchant le plan</b><small>puis orienter avec la rosace</small></span></button>
+    <h3><span><b class="step">3</b>Séances et exports</span></h3>
+    <button class="btn block mi" data-action="sessions" data-needs-plan><svg class="i"><use href="#i-timer"/></svg><span><b>Séances</b><small>groupes, chronos, classement</small></span></button>
+    <button class="btn block mi" data-action="exportHtml" data-needs-plan><svg class="i"><use href="#i-globe"/></svg><span><b>Carte interactive</b><small>fichier .html à partager</small></span></button>
+    <button class="btn block mi" data-action="exportPng" data-needs-plan><svg class="i"><use href="#i-image"/></svg><span><b>Image PNG</b><small>du plan annoté</small></span></button>
     <hr />
     <h3>Réglages</h3>
     <div class="setting">
@@ -973,6 +982,7 @@
         </div>
         <p id="mkInfo" style="margin:12px 0 0"></p>
         <div class="ss-actions"><button class="btn primary" id="mkCreate"><svg class="i"><use href="#i-check"/></svg>Créer le plan</button></div>
+        <p class="ss-note" style="margin-top:12px">Vous préférez une vraie carte de course d’orientation (couleurs et symboles normalisés) ? <button class="link-btn" id="mkOomap">La fabriquer avec OpenOrienteeringMap</button> (site externe gratuit), puis « Charger un plan » et « Caler la carte ».</p>
         <p class="ss-note">Sources libres, utilisables en classe avec leur mention (ajoutée automatiquement sur le plan) : IGN (Licence Ouverte), OpenStreetMap (licence ODbL). Réseau nécessaire pour créer le plan ; ensuite, il est enregistré avec le projet.</p>
       </div>
     </div>
@@ -3429,6 +3439,13 @@
         c.res = Math.round(Math.hypot(p.x - c.x, p.y - c.y) / GT.s * 10) / 10;
       }
       workspace.classList.toggle('has-geo', !!GT);
+      // Menu : commandes GPS grisées tant que la carte n'est pas calée, état du calage affiché.
+      document.querySelectorAll('#menu [data-needs-geo]').forEach((b) => b.classList.toggle('needs-geo', !GT));
+      const st = $('geoCalibState');
+      if (st) {
+        st.textContent = GT ? (cal.every((c) => c.src === 'auto') ? '✓ calée automatiquement' : `✓ carte calée (${cal.length} points)`) : 'à faire une fois, avant le terrain';
+        st.closest('.btn').classList.toggle('geo-ok', !!GT);
+      }
     }
     function geoToPx(lat, lon) {
       const { E, N } = geoProj(GT.o, lat, lon);
@@ -4168,6 +4185,7 @@
     }
 
     $('emptyMakePlan').addEventListener('click', openMakePlan);
+    $('mkOomap').addEventListener('click', openOomap);
 
     const actions = {
       openPlan: requestOpenPlan,
