@@ -568,6 +568,7 @@
     .empty-card p { color: var(--muted); line-height: 1.5; margin: 0 0 20px; }
     .empty-card .btn { width: 100%; min-height: 52px; font-size: 16px; }
     .empty-card .btn + .btn { margin-top: 10px; }
+    .empty-or { margin: 18px 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
     .empty-art { width: 84px; height: 84px; margin: 0 auto; }
     .steps { display: grid; gap: 10px; text-align: left; margin: 22px 0 0; padding: 0; list-style: none; font-size: 14px; color: var(--muted); }
     .steps li { display: flex; gap: 10px; align-items: flex-start; }
@@ -838,7 +839,9 @@
           <p>Choisissez un plan, placez vos postes et préparez vos séances de course d’orientation.</p>
           <button class="btn primary" id="emptyOpenPlan"><svg class="i"><use href="#i-file"/></svg>Charger un plan (PDF, photo, image)</button>
           <button class="btn" id="emptyOpenProject"><svg class="i"><use href="#i-folder"/></svg>Ouvrir un projet enregistré</button>
+          <div class="empty-or">Pas encore de plan ? En fabriquer un :</div>
           <button class="btn" id="emptyMakePlan"><svg class="i"><use href="#i-globe"/></svg>Créer un plan depuis une carte en ligne</button>
+          <button class="btn" id="emptyOomap"><svg class="i"><use href="#i-pdf"/></svg>Créer une carte de course d’orientation</button>
           <ol class="steps">
             <li><b>1</b><span>Touchez le plan pour <strong>poser</strong> un poste : il est numéroté automatiquement.</span></li>
             <li><b>2</b><span><strong>Orientez-le</strong> avec la rosace qui s’ouvre, ou en tournant la poignée bleue.</span></li>
@@ -1251,7 +1254,7 @@
     'use strict';
 
     const $ = (id) => document.getElementById(id);
-    const APP_VERSION = '2026-09-30-5'; // version test ← à incrémenter à chaque nouvelle mise en ligne
+    const APP_VERSION = '2026-09-30-6'; // version test ← à incrémenter à chaque nouvelle mise en ligne
     const SVGNS = 'http://www.w3.org/2000/svg';
     const MAX_PIXELS = 16000000; // limite de taille des canvas sur iOS
     const TAP_SLOP = 8;          // déplacement (px) en dessous duquel un toucher reste un « tap »
@@ -4293,6 +4296,7 @@
     }
 
     $('emptyMakePlan').addEventListener('click', openMakePlan);
+    $('emptyOomap').addEventListener('click', openOomap);
     $('mkOomap').addEventListener('click', openOomap);
 
     const actions = {
