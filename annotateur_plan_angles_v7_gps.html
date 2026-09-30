@@ -1,4 +1,9 @@
 <!DOCTYPE html>
+<!--
+  Angles de vue — © 2026 Patrick Gaspard, Lycée Les Iris. Tous droits réservés.
+  Toute reproduction, modification ou diffusion, totale ou partielle, sans autorisation écrite de l'auteur est interdite.
+  Contact : gaspard.lesiris@gmail.com
+-->
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
@@ -180,6 +185,8 @@
     .dock-zoom .btn { background: transparent; }
     /* ---------- GPS (version test) ---------- */
     .test-badge { font-size: 11px; font-weight: 800; color: #fff; background: #7a5af8; border-radius: 6px; padding: 1px 6px; vertical-align: 2px; }
+    .menu-sub { margin: 12px 10px 4px; font-size: 13px; font-weight: 800; color: var(--accent); }
+    .menu-sub span, .menu-note { font-weight: 600; color: var(--muted); font-size: 12px; margin-left: 4px; }
     .dock-gps {
       left: calc(12px + var(--sl)); top: 12px;
       gap: 2px; padding: 4px; background: var(--panel); border-radius: 14px; box-shadow: var(--shadow);
@@ -834,14 +841,19 @@
     <button class="btn block" data-action="openProject"><svg class="i"><use href="#i-folder"/></svg>Ouvrir un projet (.json)</button>
     <button class="btn block" data-action="saveProject" data-needs-plan><svg class="i"><use href="#i-save"/></svg>Enregistrer le projet (.json)</button>
     <button class="btn block danger-text" data-action="newProject" data-needs-plan><svg class="i"><use href="#i-new"/></svg>Nouveau projet (fermer le plan)</button>
-    <button class="btn block" data-action="placeStart" data-needs-plan><svg class="i"><use href="#i-start"/></svg>Placer le départ / arrivée</button>
     <hr />
-    <h3>GPS (version test)</h3>
-    <button class="btn block" data-action="geoCalib" data-needs-plan><svg class="i"><use href="#i-globe"/></svg>Caler la carte (photo aérienne)</button>
-    <button class="btn block" data-action="geoPhotos" data-needs-plan><svg class="i"><use href="#i-camera"/></svg>Nouveaux postes depuis des photos</button>
-    <button class="btn block" data-action="geoHere" data-needs-plan><svg class="i"><use href="#i-pin"/></svg>Nouveau poste ici (GPS + boussole)</button>
+    <h3>Placer les balises</h3>
+    <button class="btn block" data-action="placeStart" data-needs-plan><svg class="i"><use href="#i-start"/></svg>Placer le départ / arrivée</button>
+    <div class="menu-sub">Avec GPS et boussole <span>sur le terrain</span></div>
+    <button class="btn block" data-action="geoCalib" data-needs-plan><svg class="i"><use href="#i-globe"/></svg>1. Caler la carte <span class="menu-note">une fois, au bureau</span></button>
+    <button class="btn block" data-action="geoPhotos" data-needs-plan><svg class="i"><use href="#i-camera"/></svg>2. Postes depuis des photos</button>
+    <button class="btn block" data-action="geoHere" data-needs-plan><svg class="i"><use href="#i-pin"/></svg>Poste ici <span class="menu-note">mesure sur place</span></button>
     <button class="btn block" data-action="geoWhere" data-needs-plan><svg class="i"><use href="#i-target"/></svg>Où suis-je ?</button>
-    <p class="info-box" style="display:block">1. Calez la carte une fois (au bureau : un point sur la carte, le même sur la photo aérienne, 4 à 6 fois). 2. Sur place, prenez chaque photo avec l’appareil photo de l’iPhone / iPad, puis « Nouveaux postes depuis des photos » : chaque poste est posé avec son angle. Vérifiez et faites glisser si besoin.</p>
+    <p class="info-box" style="display:block">Calez la carte une fois (un point sur la carte, le même sur la photo aérienne, 4 à 6 fois). Sur le terrain, prenez chaque photo avec l’appareil photo de l’iPhone / iPad, puis « Postes depuis des photos » : chaque poste est posé avec son angle. Vérifiez et faites glisser si besoin.</p>
+    <div class="menu-sub">À la main <span>sur le plan</span></div>
+    <button class="btn block" data-action="manualPlace" data-needs-plan><svg class="i"><use href="#i-hand"/></svg>Poser les postes en touchant le plan</button>
+    <hr />
+    <h3>Séances et exports</h3>
     <button class="btn block" data-action="sessions" data-needs-plan><svg class="i"><use href="#i-timer"/></svg>Séances : groupes, chronos, classement</button>
     <button class="btn block" data-action="exportHtml" data-needs-plan><svg class="i"><use href="#i-globe"/></svg>Exporter la carte interactive (.html)</button>
     <button class="btn block" data-action="exportPng" data-needs-plan><svg class="i"><use href="#i-image"/></svg>Exporter en PNG</button>
@@ -897,7 +909,8 @@
     <p class="info-box" id="updateInfo" hidden></p>
     <p class="muted" style="padding:2px 10px;margin:2px 0 0;font-size:.85em;line-height:1.4">
       Développée par Patrick Gaspard (prof. SII) et Pauline Gaspard (prof. EPS)<br>
-      Contact : <a href="mailto:gaspard.lesiris@gmail.com" style="color:inherit">gaspard.lesiris@gmail.com</a>
+      Contact : <a href="mailto:gaspard.lesiris@gmail.com" style="color:inherit">gaspard.lesiris@gmail.com</a><br>
+      © 2026 Patrick Gaspard – Lycée Les Iris · tous droits réservés
     </p>
     <button class="btn block danger-text" data-action="clearMarkers" data-needs-plan><svg class="i"><use href="#i-eraser"/></svg>Effacer tous les postes</button>
   </nav>
@@ -1121,6 +1134,7 @@
       <li>Sur iPhone et iPad, l’enregistrement passe par la <strong>fenêtre de partage</strong> : choisissez « Enregistrer dans Fichiers ». L’aperçu y montre le contenu brut du fichier (un mur de caractères pour un .json) : c’est normal. Le réglage <strong>Enregistrement des fichiers › Téléchargement</strong> évite cette fenêtre : le fichier va dans <em>Fichiers › Téléchargements</em>.</li>
       <li>Un seul terrain est conservé automatiquement à la fois : pour plusieurs terrains, gardez <strong>un projet .json par terrain</strong> et enregistrez avant d’en changer.</li>
     </ul>
+    <p class="muted" style="margin:16px 0 0;font-size:.85em">© 2026 Patrick Gaspard – Lycée Les Iris. Tous droits réservés : reproduction, modification ou diffusion interdites sans autorisation de l’auteur.</p>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -1135,7 +1149,7 @@
     'use strict';
 
     const $ = (id) => document.getElementById(id);
-    const APP_VERSION = '2026-09-29-2'; // version test GPS // ← à incrémenter à chaque nouvelle mise en ligne
+    const APP_VERSION = '2026-09-30-2'; // version test GPS // ← à incrémenter à chaque nouvelle mise en ligne
     const SVGNS = 'http://www.w3.org/2000/svg';
     const MAX_PIXELS = 16000000; // limite de taille des canvas sur iOS
     const TAP_SLOP = 8;          // déplacement (px) en dessous duquel un toucher reste un « tap »
@@ -3881,6 +3895,7 @@
       exportHtml,
       previewHtml,
       placeStart: startPlacingStart,
+      manualPlace: () => { setAddMode(true); toast('Touchez le plan pour poser un poste, puis orientez-le avec la rosace.'); },
       geoCalib: openGeo,
       geoPhotos: geoPickPhotos,
       geoHere,
