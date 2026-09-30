@@ -666,6 +666,7 @@
     .toast { overflow-wrap: anywhere; }
     .toast > span { min-width: 0; }
     .toast .btn { flex: none; }
+    .toast .toast-close { min-width: 36px; padding: 0; font-size: 20px; background: transparent; }
     .ux-eyebrow { font-size: 10px; font-weight: 800; color: var(--accent); letter-spacing: .12em; }
     .empty-card { max-width: 510px; padding: 26px 32px; box-shadow: 0 16px 55px #283d5717; border: 1px solid #ffffff; }
     .empty-card h1 { font-size: 27px; letter-spacing: -.6px; }
@@ -1260,7 +1261,7 @@
     'use strict';
 
     const $ = (id) => document.getElementById(id);
-    const APP_VERSION = '2026-09-30-8'; // version test ← à incrémenter à chaque nouvelle mise en ligne
+    const APP_VERSION = '2026-09-30-9'; // version test ← à incrémenter à chaque nouvelle mise en ligne
     const SVGNS = 'http://www.w3.org/2000/svg';
     const MAX_PIXELS = 16000000; // limite de taille des canvas sur iOS
     const TAP_SLOP = 8;          // déplacement (px) en dessous duquel un toucher reste un « tap »
@@ -1445,10 +1446,18 @@
         b.textContent = action.label;
         b.addEventListener('click', () => { hideToast(); action.fn(); });
         toastEl.appendChild(b);
+        if (action.sticky) { // reste affiché jusqu'au clic sur le bouton ou sur la croix
+          const x = document.createElement('button');
+          x.className = 'btn toast-close';
+          x.textContent = '×';
+          x.setAttribute('aria-label', 'Fermer');
+          x.addEventListener('click', hideToast);
+          toastEl.appendChild(x);
+        }
       }
       toastEl.classList.add('show');
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(hideToast, action ? 5000 : 2800);
+      if (!action || !action.sticky) toastTimer = setTimeout(hideToast, action ? 5000 : 2800);
     }
     function hideToast() { toastEl.classList.remove('show'); }
 
@@ -2445,6 +2454,7 @@
     // Un plan, éventuellement accompagné de son fichier de position (.jgw, .pgw, .wld…) : il est alors calé tout seul.
     const isWorldFile = (f) => /\.(jgw|jpgw|jpw|pgw|pngw|wld)$/i.test(f.name);
     function openPlanFiles(files) {
+      hideToast(); // retire le rappel « Carte téléchargée ? » s'il est encore affiché
       const plan = files.find((f) => !isWorldFile(f));
       const world = files.find(isWorldFile) || null;
       if (!plan) {
@@ -4476,7 +4486,7 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState !== 'visible' || !oomapPending) return;
       oomapPending = false;
-      toast('Carte téléchargée ? Chargez-la maintenant (JPG et JGW ensemble : déjà calée).', { label: 'Charger', fn: requestOpenPlan });
+      toast('Carte téléchargée ? Chargez-la maintenant (JPG et JGW ensemble : déjà calée).', { label: 'Charger', fn: requestOpenPlan, sticky: true });
     });
 
     $('emptyMakePlan').addEventListener('click', openMakePlan);
