@@ -4288,8 +4288,8 @@
     // Carte de course d'orientation fabriquée par OpenOrienteeringMap (site externe), à charger puis caler.
     function openOomap() {
       if (!confirm('OpenOrienteeringMap (site gratuit, en anglais) fabrique une carte de course d’orientation à partir d’OpenStreetMap, pour n’importe quel lieu.\n\n' +
-        '1. Cadrez la zone et choisissez l’échelle.\n2. Téléchargez la carte en PDF.\n3. Revenez ici : Menu › Projet › « Charger un plan », puis Menu › GPS › « Caler le plan avec le GPS ».\n\nOuvrir le site ?')) return;
-      window.open('https://oomap.co.uk/', '_blank', 'noopener');
+        '1. La carte s’ouvre sur l’Angleterre : déplacez-la jusqu’au lieu et placez le cadre de la feuille sur la zone.\n2. Choisissez Scale (échelle), Sheet (A4) et Orientation, puis « Save & get PDF map ».\n3. Revenez ici : Menu › Projet › « Charger un plan », puis Menu › GPS › « Caler le plan avec le GPS ».\n\nOuvrir le site ?')) return;
+      window.open('https://oomap.dna-software.co.uk/', '_blank', 'noopener'); // copie de secours : https://oomap.ptlnet.com/
     }
 
     $('emptyMakePlan').addEventListener('click', openMakePlan);
