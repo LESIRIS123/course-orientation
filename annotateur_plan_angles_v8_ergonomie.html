@@ -693,6 +693,17 @@
     .ux-export .pdf-row { margin: 0 10px 14px; }
     .ux-export .pdf-row .btn { min-height: 46px; background: var(--accent-soft); color: #174ea6; }
     .panel-head { position: sticky; top: -8px; background: var(--panel); z-index: 2; padding: 8px 0; }
+    /* En-tête du panneau : s'adapte à la largeur disponible pour que « Terminé » ne soit jamais coupé. */
+    .panel { container-type: inline-size; }
+    .panel-head #doneBtn { flex: none; white-space: nowrap; }
+    .num-field { min-width: 0; }
+    @container (max-width: 420px) { .num-field .tag { display: none; } }
+    @container (max-width: 330px) {
+      .num-field .btn.icon { width: 38px; min-width: 38px; }
+      .num-field input { width: 56px; }
+      .panel-head #doneBtn { padding: 0 10px; }
+      .panel-head #doneBtn .i { display: none; }
+    }
     button:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid #7aa7fc; outline-offset: 2px; }
     @media (max-width: 1050px) and (min-width: 701px) {
       .ux-topbar .brand-sub { max-width: 150px; }
@@ -1240,7 +1251,7 @@
     'use strict';
 
     const $ = (id) => document.getElementById(id);
-    const APP_VERSION = '2026-09-30-3'; // version test ← à incrémenter à chaque nouvelle mise en ligne
+    const APP_VERSION = '2026-09-30-4'; // version test ← à incrémenter à chaque nouvelle mise en ligne
     const SVGNS = 'http://www.w3.org/2000/svg';
     const MAX_PIXELS = 16000000; // limite de taille des canvas sur iOS
     const TAP_SLOP = 8;          // déplacement (px) en dessous duquel un toucher reste un « tap »
