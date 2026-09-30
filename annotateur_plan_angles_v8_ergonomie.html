@@ -983,6 +983,12 @@
       <input type="range" id="defaultSize" min="12" max="80" step="1" value="26" />
       <button class="btn" id="applySizeAll" style="width:100%; margin-top:6px;" data-needs-plan>Appliquer cette taille à tous les postes</button>
       <div class="setting-row" style="margin-top:8px;">
+        <label for="legendToggle">Légende Street-O sur les impressions
+          <button class="info-btn" data-info="infoLegend" title="À quoi ça sert ?" aria-label="Explication : légende Street-O">i</button></label>
+        <span class="switch"><input type="checkbox" id="legendToggle" /><span></span></span>
+      </div>
+      <p class="info-box" id="infoLegend" hidden>Ajoute une page de légende (deux exemplaires à découper) aux cartes des groupes, au plan annoté et au corrigé. Elle correspond aux cartes fabriquées avec OpenOrienteeringMap et s’active toute seule quand vous chargez une de ces cartes (fichier « oom_… »).</p>
+      <div class="setting-row" style="margin-top:8px;">
         <span>Enregistrement des fichiers
           <button class="info-btn" data-info="infoSave" title="À quoi ça sert ?" aria-label="Explication : enregistrement des fichiers">i</button></span>
         <div class="mini-seg" id="saveSeg">
@@ -1036,7 +1042,7 @@
         </div>
         <p id="mkInfo" style="margin:12px 0 0"></p>
         <div class="ss-actions"><button class="btn primary" id="mkCreate"><svg class="i"><use href="#i-check"/></svg>Créer le plan</button></div>
-        <p class="ss-note" style="margin-top:12px">Vous préférez une vraie carte de course d’orientation (couleurs et symboles normalisés) ? <button class="link-btn" id="mkOomap">La fabriquer avec OpenOrienteeringMap</button> (site externe gratuit), puis Menu › Projet › « Charger un plan », puis Menu › GPS › « Caler le plan avec le GPS ».</p>
+        <p class="ss-note" style="margin-top:12px">Vous préférez une vraie carte de course d’orientation (couleurs et symboles normalisés) ? <button class="link-btn" id="mkOomap">La fabriquer avec OpenOrienteeringMap</button> (site externe gratuit). Téléchargez son JPG et son JGW, puis « Charger un plan » avec les deux fichiers : la carte arrive déjà calée.</p>
         <p class="ss-note">Sources libres, utilisables en classe avec leur mention (ajoutée automatiquement sur le plan) : IGN (Licence Ouverte), OpenStreetMap (licence ODbL). Réseau nécessaire pour créer le plan ; ensuite, il est enregistré avec le projet.</p>
       </div>
     </div>
@@ -1244,7 +1250,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <input id="planInput" type="file" accept="application/pdf,.pdf,image/*" hidden />
+  <input id="planInput" type="file" accept="application/pdf,.pdf,image/*,.jgw,.jpgw,.jpw,.pgw,.pngw,.wld,text/plain" multiple hidden />
   <input id="projectInput" type="file" accept=".json,application/json,text/plain" hidden />
   <input id="photoInput" type="file" accept="image/*" hidden />
   <input id="geoPhotosInput" type="file" accept="image/*" multiple hidden />
@@ -1254,7 +1260,7 @@
     'use strict';
 
     const $ = (id) => document.getElementById(id);
-    const APP_VERSION = '2026-09-30-6'; // version test ← à incrémenter à chaque nouvelle mise en ligne
+    const APP_VERSION = '2026-09-30-8'; // version test ← à incrémenter à chaque nouvelle mise en ligne
     const SVGNS = 'http://www.w3.org/2000/svg';
     const MAX_PIXELS = 16000000; // limite de taille des canvas sur iOS
     const TAP_SLOP = 8;          // déplacement (px) en dessous duquel un toucher reste un « tap »
@@ -1559,6 +1565,7 @@
         unsaved: changesSinceSave,
         start: state.start,
         geo: state.geo,
+        legend: state.legend || null,
         cardCfg: state.cardCfg,
         settings: { autoIncrement: state.autoIncrement, angleStep: state.angleStep, defaultSize: state.defaultSize, saveMode: state.saveMode, symbol: state.symbol },
         view: state.bg ? { s: view.s, tx: view.tx, ty: view.ty, fitted: view.fitted } : null
@@ -2336,6 +2343,7 @@
       state.start = null;
       state.geo = null;
       geoFit();
+      state.legend = null;
       state.classes = [];
       saveClassesNow();
       state.cardCfg.commonIds = [];
@@ -2433,13 +2441,43 @@
       planInput.value = '';
       planInput.click();
     }
-    planInput.addEventListener('change', () => {
-      const f = planInput.files[0];
-      if (f) loadPlanFile(f);
-    });
+    planInput.addEventListener('change', () => openPlanFiles([...planInput.files]));
+    // Un plan, éventuellement accompagné de son fichier de position (.jgw, .pgw, .wld…) : il est alors calé tout seul.
+    const isWorldFile = (f) => /\.(jgw|jpgw|jpw|pgw|pngw|wld)$/i.test(f.name);
+    function openPlanFiles(files) {
+      const plan = files.find((f) => !isWorldFile(f));
+      const world = files.find(isWorldFile) || null;
+      if (!plan) {
+        toast(world ? 'Choisissez l’image de la carte (JPG) en même temps que ce fichier de position.' : 'Aucun plan dans ces fichiers.');
+        return;
+      }
+      loadPlanFile(plan, world);
+    }
+    // Fichier de position (« world file », 6 nombres) : coordonnées Web Mercator (EPSG:3857) du centre de chaque
+    // pixel, comme ceux d'OpenOrienteeringMap. On en déduit un calage exact : coins et centre du plan.
+    async function applyWorldFile(world, scale, natW, natH) {
+      const n = (await world.text()).trim().split(/\s+/).map(Number);
+      if (n.length < 6 || !n.slice(0, 6).every(Number.isFinite)) return false;
+      const [A, D, B, E, C, F] = n; // ordre du fichier : A, D, B, E, C, F
+      const R = 6378137;
+      const toLL = (col, row) => {
+        const x = A * col + B * row + C, y = D * col + E * row + F;
+        return { lat: (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * 180 / Math.PI, lon: x / R * 180 / Math.PI };
+      };
+      const cal = [[0, 0], [natW, 0], [0, natH], [natW, natH], [natW / 2, natH / 2]].map(([px, py], i) => {
+        const ll = toLL(px - 0.5, py - 0.5);
+        return { id: 'auto' + i, x: px * scale, y: py * scale, lat: ll.lat, lon: ll.lon, src: 'auto' };
+      });
+      if (!cal.every((c) => Math.abs(c.lat) < 85 && Math.abs(c.lon) <= 180)) return false;
+      state.geo = { cal, decl: 1.5, proj: 'merc' };
+      geoFit();
+      scheduleSave();
+      return !!GT;
+    }
 
-    async function loadPlanFile(file) {
+    async function loadPlanFile(file, world = null) {
       const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+      let natW = 0, natH = 0;
       const baseName = file.name.replace(/\.[^.]+$/, '');
       try {
         if (isPdf) {
@@ -2458,11 +2496,21 @@
             r.onerror = () => reject(r.error);
             r.readAsDataURL(file);
           });
+          if (world) { const im = await loadImage(dataUrl); natW = im.naturalWidth; natH = im.naturalHeight; }
           await setBackground(dataUrl, file.name, { downscale: true });
         }
         startNewPlan();
         setAddMode(true);
-        toast('Plan chargé. Placez d’abord le départ / arrivée.', { label: 'Placer', fn: startPlacingStart });
+        state.legend = /^oom_/i.test(file.name) ? 'streeto' : null; // carte OpenOrienteeringMap → légende Street-O
+        scheduleSave();
+        const legendNote = legendOn() ? ' Légende Street-O ajoutée aux impressions.' : '';
+        if (world && !isPdf && natW && await applyWorldFile(world, state.bg.w / natW, natW, natH)) {
+          toast('Carte chargée et calée automatiquement (fichier de position).' + legendNote + ' Placez d’abord le départ / arrivée.', { label: 'Placer', fn: startPlacingStart });
+        } else if (world) {
+          toast(isPdf ? 'Le fichier de position va avec l’image JPG, pas avec le PDF : chargez le JPG et le JGW ensemble.' : 'Fichier de position illisible : calez la carte vous-même (Menu › GPS).');
+        } else {
+          toast('Plan chargé.' + legendNote + ' Placez d’abord le départ / arrivée.', { label: 'Placer', fn: startPlacingStart });
+        }
       } catch (err) {
         console.error(err);
         toast(isPdf ? 'Impossible de lire ce PDF.' : 'Impossible de lire cette image.');
@@ -2507,6 +2555,7 @@
           ...(data.geo.proj === 'merc' ? { proj: 'merc' } : {})
         } : null;
         geoFit();
+        state.legend = data.legend === 'streeto' ? 'streeto' : null;
         state.photos = data.photos && typeof data.photos === 'object' ? data.photos : {};
         await clearStoredPhotos();
         Object.keys(state.photos).forEach(savePhoto);
@@ -2554,6 +2603,7 @@
         photos: usedPhotos(),
         start: state.start,
         geo: state.geo,
+        legend: state.legend || null,
         symbol: state.symbol,
         classes: state.classes,
         cardCfg: {
@@ -3105,12 +3155,125 @@
         const [W, H] = bestPage(format, () => 0);
         const pen = pdfPen();
         pen.map(state.markers, PDF_MARGIN, PDF_MARGIN, W - 2 * PDF_MARGIN, H - 2 * PDF_MARGIN);
-        saveBlob(buildPdfDoc([{ w: W, h: H, ops: pen.ops }], jpeg), `${fileBase()}_annote_${format}.pdf`);
+        saveBlob(buildPdfDoc([{ w: W, h: H, ops: pen.ops }, ...withLegend(format)], jpeg), `${fileBase()}_annote_${format}.pdf`);
       } catch (err) {
         console.error(err);
         toast('Export PDF impossible : image trop grande pour cet appareil.');
       }
     }
+
+
+    // ---------- Légende des cartes OpenOrienteeringMap (Street-O), ajoutée aux impressions ----------
+    // Couleurs et symboles relevés dans le style « streeto » d'OpenOrienteeringMap v4 (github.com/cadnant/oomap).
+    const LEGEND_STREETO = [
+      ['Se déplacer', [
+        ['line', 'Rue, route', { c: '#000000', w: 1.2 }],
+        ['road', 'Grand axe'],
+        ['line', 'Chemin, sentier', { c: '#000000', w: 1, dash: [4, 2] }],
+        ['area', 'Place, zone piétonne, parking', '#F1CDAB'],
+        ['rail', 'Voie ferrée, tram'],
+        ['line', 'Passage souterrain', { c: '#999999', w: 1.2, dash: [2, 2] }],
+        ['blank', 'Bâtiment, terrain privé (blanc)']
+      ]],
+      ['Terrain, végétation', [
+        ['area', 'Parc, pelouse, terrain de sport, aire de jeux', '#FFBF50'],
+        ['area', 'Champ, friche, broussailles, cimetière', '#FFDDA3'],
+        ['area', 'Bois, verger', '#C5FFB2'],
+        ['dot', 'Arbre isolé', '#2FB457'],
+        ['line', 'Haie', { c: '#2FB457', w: 2 }],
+        ['area', 'Eau : bassin, rivière', '#8FE8FF'],
+        ['area', 'Chantier, décharge, établissement scolaire', '#FF99FF']
+      ]],
+      ['Obstacles, repères', [
+        ['wall', 'Mur (infranchissable)'],
+        ['fence', 'Clôture (infranchissable)'],
+        ['ticks', 'Falaise, paroi', '#000000'],
+        ['ticks', 'Talus', '#CF7417'],
+        ['power', 'Ligne électrique'],
+        ['cross', 'Banc, poubelle, table'],
+        ['monument', 'Monument, statue'],
+        ['contour', 'Courbe de niveau (relief)'],
+        ['north', 'Ligne du nord (haut = nord)']
+      ]]
+    ];
+    const legendOn = () => state.legend === 'streeto';
+    function wrapWords(str, max) {
+      const out = [];
+      let cur = '';
+      for (const w of str.split(' ')) {
+        if (cur && (cur + ' ' + w).length > max) { out.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w;
+      }
+      if (cur) out.push(cur);
+      return out;
+    }
+    // Un exemplaire de la légende dans le rectangle (x, y, w, h) ; origine en bas à gauche, en points.
+    function drawLegend(ops, x, y, w, h) {
+      const s = w / 520; // 520 pt ≈ largeur utile d'une feuille A4
+      const T = (tx, ty, str, size, bold, col = '#172033') => ops.push(`BT /F${bold ? 2 : 1} ${pn(size * s)} Tf ${rgb(col)} rg ${pn(tx)} ${pn(ty)} Td ${pdfStr(str)} Tj ET`);
+      const L = (x1, y1, x2, y2, lw, col, dash) => ops.push(`q ${dash ? `[${dash.map((d) => pn(d * s)).join(' ')}] 0 d ` : ''}${rgb(col)} RG ${pn(lw * s)} w ${pn(x1)} ${pn(y1)} m ${pn(x2)} ${pn(y2)} l S Q`);
+      const R = (rx, ry, rw, rh, col) => ops.push(`${rgb(col)} rg ${pn(rx)} ${pn(ry)} ${pn(rw)} ${pn(rh)} re f`);
+      const C = (cx, cy, r, fill, stroke, lw = 1) => {
+        const k = 0.5523 * r;
+        const path = `${pn(cx + r)} ${pn(cy)} m ${pn(cx + r)} ${pn(cy + k)} ${pn(cx + k)} ${pn(cy + r)} ${pn(cx)} ${pn(cy + r)} c ` +
+          `${pn(cx - k)} ${pn(cy + r)} ${pn(cx - r)} ${pn(cy + k)} ${pn(cx - r)} ${pn(cy)} c ` +
+          `${pn(cx - r)} ${pn(cy - k)} ${pn(cx - k)} ${pn(cy - r)} ${pn(cx)} ${pn(cy - r)} c ` +
+          `${pn(cx + k)} ${pn(cy - r)} ${pn(cx + r)} ${pn(cy - k)} ${pn(cx + r)} ${pn(cy)} c`;
+        ops.push(`q ${fill ? rgb(fill) + ' rg ' : ''}${stroke ? rgb(stroke) + ' RG ' + pn(lw * s) + ' w ' : ''}${path} ${fill && stroke ? 'B' : fill ? 'f' : 'S'} Q`);
+      };
+      function sym(kind, opt, sx, my, sw) {
+        const x2 = sx + sw, mid = sx + sw / 2;
+        if (kind === 'line') L(sx, my, x2, my, opt.w, opt.c, opt.dash);
+        else if (kind === 'road') { L(sx, my, x2, my, 7, '#000000'); L(sx, my, x2, my, 5, '#F1CDAB'); }
+        else if (kind === 'area') R(sx, my - 5.5 * s, sw, 11 * s, opt);
+        else if (kind === 'blank') ops.push(`q [${pn(2 * s)} ${pn(2 * s)}] 0 d ${rgb('#BBBBBB')} RG ${pn(0.6 * s)} w ${pn(sx)} ${pn(my - 5.5 * s)} ${pn(sw)} ${pn(11 * s)} re S Q`);
+        else if (kind === 'rail') { L(sx, my, x2, my, 4, '#000000'); L(sx, my, x2, my, 2, '#FFFFFF', [4, 3]); }
+        else if (kind === 'dot') C(mid, my, 3 * s, opt);
+        else if (kind === 'wall') { L(sx, my, x2, my, 0.9, '#000000'); for (let i = 4; i < 40; i += 9) C(sx + i * s, my, 1.7 * s, '#000000'); }
+        else if (kind === 'fence') { L(sx, my, x2, my, 0.9, '#000000'); for (let i = 3; i < 38; i += 8) L(sx + i * s, my - 2.5 * s, sx + (i + 3) * s, my + 2.5 * s, 0.9, '#000000'); }
+        else if (kind === 'ticks') { L(sx, my + 1.5 * s, x2, my + 1.5 * s, 2, opt); for (let i = 4; i < 40; i += 7) L(sx + i * s, my + 1.5 * s, sx + i * s, my - 3.5 * s, 1, opt); }
+        else if (kind === 'power') { L(sx, my, x2, my, 0.9, '#000000'); for (let i = 6; i < 40; i += 12) L(sx + i * s, my - 3 * s, sx + i * s, my + 3 * s, 0.9, '#000000'); }
+        else if (kind === 'cross') { L(mid - 3 * s, my - 3 * s, mid + 3 * s, my + 3 * s, 1.2, '#000000'); L(mid - 3 * s, my + 3 * s, mid + 3 * s, my - 3 * s, 1.2, '#000000'); }
+        else if (kind === 'monument') { C(mid, my, 4 * s, '#FFFFFF', '#000000', 1.4); C(mid, my, 1.5 * s, '#000000'); }
+        else if (kind === 'contour') ops.push(`q ${rgb('#D96919')} RG ${pn(s)} w ${pn(sx)} ${pn(my)} m ${pn(sx + 10 * s)} ${pn(my + 5 * s)} ${pn(sx + 15 * s)} ${pn(my - 5 * s)} ${pn(sx + 20 * s)} ${pn(my)} c ${pn(sx + 25 * s)} ${pn(my + 5 * s)} ${pn(sx + 30 * s)} ${pn(my - 5 * s)} ${pn(x2)} ${pn(my)} c S Q`);
+        else if (kind === 'north') { L(mid, my - 6 * s, mid, my + 3 * s, 0.8, '#6E6EF0'); ops.push(`${rgb('#6E6EF0')} rg ${pn(mid)} ${pn(my + 7 * s)} m ${pn(mid - 2.5 * s)} ${pn(my + 2 * s)} l ${pn(mid + 2.5 * s)} ${pn(my + 2 * s)} l h f`); }
+      }
+      ops.push(`q ${rgb('#333333')} RG ${pn(s)} w ${pn(x)} ${pn(y)} ${pn(w)} ${pn(h)} re S Q`);
+      const pad = 16 * s, top = y + h - pad;
+      T(x + pad, top - 13 * s, 'Légende de la carte de course d’orientation', 14, true);
+      T(x + pad, top - 26 * s, 'Cartes « Street-O » fabriquées avec OpenOrienteeringMap (données OpenStreetMap)', 8, false, '#475467');
+      const ry = top - 64 * s;
+      R(x + pad, ry, w - 2 * pad, 30 * s, '#F3F4F6');
+      T(x + pad + 7 * s, ry + 18 * s, 'Le blanc correspond aux bâtiments, jardins et terrains privés : on ne les traverse pas.', 8.5, true);
+      T(x + pad + 7 * s, ry + 7 * s, 'On se déplace par les rues, les chemins et les espaces colorés (parcs, pelouses, places).', 8.5, false);
+      const colGap = 14 * s, colW = (w - 2 * pad - 2 * colGap) / 3;
+      LEGEND_STREETO.forEach(([title, items], ci) => {
+        const cx = x + pad + ci * (colW + colGap);
+        let cy = ry - 20 * s;
+        T(cx, cy, title.toUpperCase(), 8.5, true, '#333333');
+        L(cx, cy - 4 * s, cx + colW, cy - 4 * s, 0.6, '#CCCCCC');
+        cy -= 20 * s;
+        for (const [kind, label, opt] of items) {
+          const sw = 40 * s, my = cy + 3 * s;
+          sym(kind, opt, cx, my, sw);
+          const lines = wrapWords(label, 26);
+          lines.forEach((ln, i) => T(cx + sw + 8 * s, my - 3 * s + (lines.length - 1) * 4.5 * s - i * 9.5 * s, ln, 8, false));
+          cy -= (lines.length > 1 ? 24 : 18) * s;
+        }
+      });
+      T(x + pad, y + 8 * s, 'Données © contributeurs OpenStreetMap (ODbL) · courbes : IGN (Licence Ouverte) · cartes OpenOrienteeringMap (O. O’Brien, D. Dixon) · légende : Angles de vue', 6, false, '#667085');
+    }
+    // Page de légende : deux exemplaires à découper.
+    function legendPages(format) {
+      const [W, H] = PAGE_SIZES[format] || PAGE_SIZES.A4;
+      const M = PDF_MARGIN, gap = 22, bh = (H - 2 * M - gap) / 2, cut = M + bh + gap / 2;
+      const ops = [];
+      drawLegend(ops, M, M + bh + gap, W - 2 * M, bh);
+      ops.push(`q [4 3] 0 d ${rgb('#999999')} RG 0.6 w ${pn(M)} ${pn(cut)} m ${pn(W - M)} ${pn(cut)} l S Q`);
+      ops.push(`BT /F1 7 Tf ${rgb('#999999')} rg ${pn(W / 2 - 14)} ${pn(cut + 3)} Td ${pdfStr('découper')} Tj ET`);
+      drawLegend(ops, M, M, W - 2 * M, bh);
+      return [{ w: W, h: H, ops }];
+    }
+    const withLegend = (format) => (legendOn() ? legendPages(format) : []);
 
     // ---------- Corrigé papier : plan maître + photos des postes ----------
     const planTitle = () => ((state.bg && state.bg.name) || 'Plan').replace(/\.[^.]+$/, '');
@@ -3214,7 +3377,8 @@
         const photos = await photoImages(state.markers);
         const pages = [
           masterPage(format, 'Corrigé — plan maître', `${planTitle()} · ${state.markers.length} postes`, ''),
-          ...photoPages(format, photos)
+          ...photoPages(format, photos),
+          ...withLegend(format)
         ];
         const images = [{ name: 'Im0', jpeg, w: state.bg.w, h: state.bg.h }, ...photos.values()];
         saveBlob(buildPdfDoc(pages, images), `${fileBase()}_corrige_photos_${format}.pdf`);
@@ -3313,7 +3477,15 @@
     }
 
     // ---------- Menu et réglages ----------
+    const legendToggle = $('legendToggle');
+    legendToggle.addEventListener('change', () => {
+      state.legend = legendToggle.checked ? 'streeto' : null;
+      scheduleSave();
+      noteUnsavedChange();
+      toast(legendToggle.checked ? 'Une page de légende Street-O sera ajoutée aux impressions.' : 'Plus de page de légende dans les impressions.');
+    });
     function openMenu() {
+      legendToggle.checked = state.legend === 'streeto';
       closeOverlays(); menu.hidden = false; backdrop.hidden = false;
       $('menuBtn').setAttribute('aria-expanded', 'true');
       menu.querySelector('[role="tab"][aria-selected="true"]').focus();
@@ -4291,9 +4463,21 @@
     // Carte de course d'orientation fabriquée par OpenOrienteeringMap (site externe), à charger puis caler.
     function openOomap() {
       if (!confirm('OpenOrienteeringMap (site gratuit, en anglais) fabrique une carte de course d’orientation à partir d’OpenStreetMap, pour n’importe quel lieu.\n\n' +
-        '1. La carte s’ouvre sur l’Angleterre : déplacez-la jusqu’au lieu et placez le cadre de la feuille sur la zone.\n2. Choisissez Scale (échelle), Sheet (A4) et Orientation, puis « Save & get PDF map ».\n3. Revenez ici : Menu › Projet › « Charger un plan », puis Menu › GPS › « Caler le plan avec le GPS ».\n\nOuvrir le site ?')) return;
+        '1. La carte s’ouvre sur l’Angleterre : déplacez-la jusqu’au lieu et placez le cadre de la feuille sur la zone.\n' +
+        '2. Choisissez Scale (échelle), Sheet (A4) et Orientation, puis « Save & get PDF map ».\n' +
+        '3. Toujours sur le site, cliquez aussi « JPG » puis « JGW » (ligne « Get ») : deux fichiers.\n' +
+        '4. Revenez ici, « Charger un plan », et choisissez ces deux fichiers ensemble : la carte arrive déjà calée pour le GPS.\n' +
+        '(Avec le PDF seul, il faudra caler la carte vous-même : Menu › GPS.)\n\nOuvrir le site ?')) return;
+      oomapPending = true;
       window.open('https://oomap.dna-software.co.uk/', '_blank', 'noopener'); // copie de secours : https://oomap.ptlnet.com/
     }
+    // Au retour dans l'application après un passage sur OpenOrienteeringMap : proposer de charger la carte.
+    let oomapPending = false;
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible' || !oomapPending) return;
+      oomapPending = false;
+      toast('Carte téléchargée ? Chargez-la maintenant (JPG et JGW ensemble : déjà calée).', { label: 'Charger', fn: requestOpenPlan });
+    });
 
     $('emptyMakePlan').addEventListener('click', openMakePlan);
     $('emptyOomap').addEventListener('click', openOomap);
@@ -4338,6 +4522,7 @@
         state.start = null;
         state.geo = null;
         geoFit();
+        state.legend = null;
         state.classes = [];
         saveClassesNow();
         state.cardCfg.commonIds = [];
@@ -5237,7 +5422,7 @@
             markers
           });
         }
-        const pages = cardPages(format, cards);
+        const pages = [...cardPages(format, cards), ...withLegend(format)];
         pages.push(masterPage(format, 'Corrigé — plan maître', `${c.name} · séance ${s.num} · ${title}`, ''));
         const usedList = [...used];
         const photos = await photoImages(usedList);
@@ -7285,7 +7470,7 @@
             });
           }
         }
-        const pages = cardPages(format, cards);
+        const pages = [...cardPages(format, cards), ...withLegend(format)];
         pages.push(masterPage(format, 'Corrigé — évaluation (plan maître)', `${c.name} · ${planTitle()}`, ''));
         const usedList = [...used];
         const photos = await photoImages(usedList);
@@ -7387,11 +7572,12 @@
     window.addEventListener('drop', (e) => {
       e.preventDefault();
       workspace.classList.remove('drag-over');
-      const f = e.dataTransfer && e.dataTransfer.files[0];
+      const files = e.dataTransfer ? [...e.dataTransfer.files] : [];
+      const f = files[0];
       if (!f) return;
       const isJson = /\.json$/i.test(f.name) || f.type === 'application/json';
       if (state.markers.length && !confirm('Remplacer le travail en cours par ce fichier ?')) return;
-      isJson ? loadProjectFile(f) : loadPlanFile(f);
+      isJson ? loadProjectFile(f) : openPlanFiles(files);
     });
 
     // ---------- Démarrage : reprise du travail précédent ----------
@@ -7435,6 +7621,7 @@
           if (doc && doc.cardCfg) Object.assign(state.cardCfg, doc.cardCfg);
           state.start = (doc && doc.start) || null;
           state.geo = (doc && doc.geo) || null;
+          state.legend = doc && doc.legend === 'streeto' ? 'streeto' : null;
           geoFit();
           try { state.classes = (await DB.get('classes')) || []; } catch (_) { state.classes = []; }
           ensureUids();
