@@ -185,6 +185,11 @@
     .dock-zoom .btn { background: transparent; }
     /* ---------- GPS (version test) ---------- */
     .test-badge { font-size: 11px; font-weight: 800; color: #fff; background: #7a5af8; border-radius: 6px; padding: 1px 6px; vertical-align: 2px; }
+    .mk-wrap { position: relative; max-width: 1200px; margin: 0 auto 12px; }
+    #mkMap { height: 62vh; border-radius: 12px; background: #d9dee6; }
+    .mk-frame { position: absolute; z-index: 500; pointer-events: none; border: 3px solid #2563eb; border-radius: 4px; box-shadow: 0 0 0 9999px rgba(15, 23, 42, .28); }
+    .mk-clip { position: absolute; inset: 0; overflow: hidden; border-radius: 12px; pointer-events: none; z-index: 500; }
+    a.btn { text-decoration: none; color: inherit; }
     .menu-sub { margin: 12px 10px 4px; font-size: 13px; font-weight: 800; color: var(--accent); }
     .menu-sub span, .menu-note { font-weight: 600; color: var(--muted); font-size: 12px; margin-left: 4px; }
     .dock-gps {
@@ -727,6 +732,7 @@
           <p>Posez les postes sur votre plan d’un simple toucher, puis orientez-les ensuite avec la rosace ou la poignée.</p>
           <button class="btn primary" id="emptyOpenPlan"><svg class="i"><use href="#i-file"/></svg>Charger un plan (PDF, photo, image)</button>
           <button class="btn" id="emptyOpenProject"><svg class="i"><use href="#i-folder"/></svg>Ouvrir un projet enregistré</button>
+          <button class="btn" id="emptyMakePlan"><svg class="i"><use href="#i-globe"/></svg>Pas de plan ? Le créer depuis une carte en ligne</button>
           <ol class="steps">
             <li><b>1</b><span>Touchez le plan pour <strong>poser</strong> un poste : il est numéroté automatiquement.</span></li>
             <li><b>2</b><span><strong>Orientez-le</strong> avec la rosace qui s’ouvre, ou en tournant la poignée bleue.</span></li>
@@ -838,6 +844,8 @@
   <nav class="menu" id="menu" hidden aria-label="Menu">
     <h3>Fichiers <span id="markerCount"></span></h3>
     <button class="btn block" data-action="openPlan"><svg class="i"><use href="#i-file"/></svg>Charger un plan (PDF / image)</button>
+    <button class="btn block" data-action="makePlan"><svg class="i"><use href="#i-globe"/></svg>Créer un plan depuis une carte en ligne <span class="menu-note">IGN, OpenStreetMap</span></button>
+    <button class="btn block" data-action="oomap"><svg class="i"><use href="#i-new"/></svg>Carte de CO depuis OpenStreetMap <span class="menu-note">site externe</span></button>
     <button class="btn block" data-action="openProject"><svg class="i"><use href="#i-folder"/></svg>Ouvrir un projet (.json)</button>
     <button class="btn block" data-action="saveProject" data-needs-plan><svg class="i"><use href="#i-save"/></svg>Enregistrer le projet (.json)</button>
     <button class="btn block danger-text" data-action="newProject" data-needs-plan><svg class="i"><use href="#i-new"/></svg>Nouveau projet (fermer le plan)</button>
@@ -937,6 +945,39 @@
   </nav>
 
   <!-- Séances de course : préparation, chronos, résultats -->
+  <section class="session-screen" id="mkScreen" hidden aria-label="Créer un plan depuis une carte en ligne">
+    <header class="ss-top">
+      <button class="btn ghost with-lbl" id="mkBack" title="Revenir au plan"><svg class="i"><use href="#i-left"/></svg><span class="lbl">Retour</span></button>
+      <div class="ss-title">Créer un plan depuis une carte</div>
+    </header>
+    <div class="ss-body">
+      <div class="ss-card" style="max-width:1200px">
+        <div class="ss-fields" style="align-items:end">
+          <div><label for="mkQ">Lieu</label><input class="ss-input" id="mkQ" placeholder="ex. Lycée Les Iris, Lormont · Place de la Bourse, Bordeaux"></div>
+          <div><button class="btn" id="mkGo" style="width:100%">Chercher</button></div>
+        </div>
+      </div>
+      <div class="mk-wrap"><div id="mkMap"></div><div class="mk-clip"><div class="mk-frame" id="mkFrame"></div></div></div>
+      <div class="ss-card" style="max-width:1200px">
+        <p class="ss-note">Déplacez et zoomez la carte : <strong>le plan sera la zone encadrée en bleu</strong>. Il sera déjà calé pour le GPS.</p>
+        <div class="ss-fields">
+          <div><label for="mkSource">Fond de carte</label><select class="ss-select" id="mkSource">
+            <option value="osm">OpenStreetMap (rues, bâtiments : idéal en ville)</option>
+            <option value="plan">Plan IGN</option>
+            <option value="ortho">Photo aérienne (IGN)</option></select></div>
+          <div><label for="mkFormat">Format</label><select class="ss-select" id="mkFormat">
+            <option value="portrait">A4 portrait</option>
+            <option value="paysage">A4 paysage</option>
+            <option value="ecran">Tout l’écran</option></select></div>
+          <div><label for="mkTitle">Titre sur le plan (facultatif)</label><input class="ss-input" id="mkTitle" placeholder="ex. Abords du lycée"></div>
+        </div>
+        <p id="mkInfo" style="margin:12px 0 0"></p>
+        <div class="ss-actions"><button class="btn primary" id="mkCreate"><svg class="i"><use href="#i-check"/></svg>Créer le plan</button></div>
+        <p class="ss-note">Sources libres, utilisables en classe avec leur mention (ajoutée automatiquement sur le plan) : IGN (Licence Ouverte), OpenStreetMap (licence ODbL). Réseau nécessaire pour créer le plan ; ensuite, il est enregistré avec le projet.</p>
+      </div>
+    </div>
+  </section>
+
   <section class="session-screen" id="geoScreen" hidden aria-label="Calage GPS de la carte">
     <header class="ss-top">
       <button class="btn ghost with-lbl" id="geoBack" title="Revenir au plan"><svg class="i"><use href="#i-left"/></svg><span class="lbl">Plan</span></button>
@@ -2398,7 +2439,8 @@
         state.geo = data.geo && Array.isArray(data.geo.cal) ? {
           cal: data.geo.cal.filter((c) => [c.x, c.y, c.lat, c.lon].every((v) => Number.isFinite(Number(v)))).map((c, i) => ({
             id: String(c.id || 'c' + i), x: Number(c.x), y: Number(c.y), lat: Number(c.lat), lon: Number(c.lon), src: String(c.src || 'saisie'), ...(Number.isFinite(Number(c.acc)) ? { acc: Number(c.acc) } : {}) })),
-          decl: Number.isFinite(Number(data.geo.decl)) ? Number(data.geo.decl) : 1.5
+          decl: Number.isFinite(Number(data.geo.decl)) ? Number(data.geo.decl) : 1.5,
+          ...(data.geo.proj === 'merc' ? { proj: 'merc' } : {})
         } : null;
         geoFit();
         state.photos = data.photos && typeof data.photos === 'object' ? data.photos : {};
@@ -3341,8 +3383,25 @@
     // =====================================================================================
     // geoReady (var : pas de zone morte) protège les rendus appelés avant que ce module soit initialisé.
     var geoReady = false;
-    const GEO_R = Math.PI / 180, M_LAT = 110574;
-    const mLon = (lat) => 111320 * Math.cos(lat * GEO_R);
+    const GEO_R = Math.PI / 180;
+    // Coordonnées GPS → mètres autour du centre du calage (o), selon le type de plan :
+    // - 'merc' : plan créé depuis une carte en ligne, dessiné en projection de Mercator → calage exact ;
+    // - sinon  : carte scannée ou PDF (vraies distances au sol) → rayons de courbure de l'ellipsoïde WGS84.
+    const mercY = (lat) => Math.log(Math.tan(Math.PI / 4 + lat * GEO_R / 2));
+    function geoRadii(lat) {
+      const e2 = 0.00669438, w = Math.sqrt(1 - e2 * Math.sin(lat * GEO_R) ** 2);
+      return { M: 6378137 * (1 - e2) / w ** 3, N: 6378137 / w };
+    }
+    function geoProj(o, lat, lon) {
+      if (o.proj === 'merc') { const k = 6378137 * Math.cos(o.lat * GEO_R); return { E: k * (lon - o.lon) * GEO_R, N: k * (mercY(lat) - mercY(o.lat)) }; }
+      const r = geoRadii(o.lat);
+      return { E: r.N * Math.cos(o.lat * GEO_R) * (lon - o.lon) * GEO_R, N: r.M * (lat - o.lat) * GEO_R };
+    }
+    function geoUnproj(o, E, N) {
+      if (o.proj === 'merc') { const k = 6378137 * Math.cos(o.lat * GEO_R); return { lat: (2 * Math.atan(Math.exp(N / k + mercY(o.lat))) - Math.PI / 2) / GEO_R, lon: o.lon + E / k / GEO_R }; }
+      const r = geoRadii(o.lat);
+      return { lat: o.lat + N / r.M / GEO_R, lon: o.lon + E / (r.N * Math.cos(o.lat * GEO_R)) / GEO_R };
+    }
     const fmt1 = (x) => String(Math.round(x * 10) / 10).replace('.', ',');
     let GT = null;
     const geoDecl = () => (state.geo && Number.isFinite(state.geo.decl) ? state.geo.decl : 1.5);
@@ -3350,8 +3409,8 @@
       GT = null;
       const cal = (state.geo && state.geo.cal) || [];
       if (cal.length >= 2) {
-        const o = { lat: cal.reduce((a, c) => a + c.lat, 0) / cal.length, lon: cal.reduce((a, c) => a + c.lon, 0) / cal.length };
-        const q = cal.map((c) => ({ E: (c.lon - o.lon) * mLon(o.lat), N: (c.lat - o.lat) * M_LAT, X: c.x, Y: -c.y }));
+        const o = { lat: cal.reduce((a, c) => a + c.lat, 0) / cal.length, lon: cal.reduce((a, c) => a + c.lon, 0) / cal.length, proj: state.geo.proj === 'merc' ? 'merc' : 'sol' };
+        const q = cal.map((c) => ({ ...geoProj(o, c.lat, c.lon), X: c.x, Y: -c.y }));
         const avg = (k) => q.reduce((a, p) => a + p[k], 0) / q.length;
         const Em = avg('E'), Nm = avg('N'), Xm = avg('X'), Ym = avg('Y');
         let sa = 0, sb = 0, sq = 0;
@@ -3372,13 +3431,12 @@
       workspace.classList.toggle('has-geo', !!GT);
     }
     function geoToPx(lat, lon) {
-      const E = (lon - GT.o.lon) * mLon(GT.o.lat), N = (lat - GT.o.lat) * M_LAT;
+      const { E, N } = geoProj(GT.o, lat, lon);
       return { x: GT.A * E - GT.B * N + GT.C, y: -(GT.B * E + GT.A * N + GT.D) };
     }
     function pxToGeo(x, y) {
       const dX = x - GT.C, dY = -y - GT.D, k = GT.A * GT.A + GT.B * GT.B;
-      const E = (GT.A * dX + GT.B * dY) / k, N = (-GT.B * dX + GT.A * dY) / k;
-      return { lat: GT.o.lat + N / M_LAT, lon: GT.o.lon + E / mLon(GT.o.lat) };
+      return geoUnproj(GT.o, (GT.A * dX + GT.B * dY) / k, (-GT.B * dX + GT.A * dY) / k);
     }
     // Angle sur le plan (0 = vers le haut, sens horaire) d'une direction donnée par rapport au nord géographique.
     const geoAngle = (b) => normalizeAngle(Math.round(Math.atan2(GT.A * Math.sin(b * GEO_R) - GT.B * Math.cos(b * GEO_R), GT.B * Math.sin(b * GEO_R) + GT.A * Math.cos(b * GEO_R)) / GEO_R));
@@ -3874,7 +3932,7 @@
         }
       }
       $('geoCal').innerHTML = n ? `<div class="table-wrap"><table class="res"><thead><tr><th>Point</th><th>Coordonnées</th><th>Source</th><th class="n">Écart</th><th></th></tr></thead><tbody>${cal.map((c, i) =>
-        `<tr><td><strong>C${i + 1}</strong></td><td>${c.lat.toFixed(6)}, ${c.lon.toFixed(6)}</td><td>${c.src === 'carte' ? 'photo aérienne' : c.src === 'mesure' ? `mesure ± ${fmt1(c.acc)} m` : 'saisie'}</td>` +
+        `<tr><td><strong>C${i + 1}</strong></td><td>${c.lat.toFixed(6)}, ${c.lon.toFixed(6)}</td><td>${c.src === 'carte' ? 'photo aérienne' : c.src === 'mesure' ? `mesure ± ${fmt1(c.acc)} m` : c.src === 'auto' ? 'plan créé (automatique)' : 'saisie'}</td>` +
         `<td class="n">${c.res != null ? `<strong class="${c.res > 8 ? 'ss-warn' : 'ss-ok'}">${fmt1(c.res)} m</strong>` : '—'}</td><td class="n"><button class="btn" data-delcal="${c.id}" style="min-height:34px">Suppr.</button></td></tr>`).join('')}</tbody></table></div>` +
         '<p class="ss-note">Écart : distance entre le point touché sur votre carte et la position que le calage calcule pour ses coordonnées (trait orange). Au-delà de 5 à 8 m, refaites ce point.</p>' : '';
       // Bilan des postes placés par GPS : l'erreur réelle, mesurée par les corrections du prof.
@@ -3887,6 +3945,230 @@
     }
     geoReady = true;
 
+    // ---------- Créer un plan depuis une carte en ligne (IGN, OpenStreetMap), déjà calé ----------
+    // Le plan est la zone encadrée sur la carte : les tuiles sont assemblées dans un canvas, puis on ajoute
+    // titre, échelle, nord et sources. Chaque pixel ayant des coordonnées connues, le calage est automatique.
+    const MK_SOURCES = {
+      ortho: { label: 'Photo aérienne (IGN)', max: 19, fmt: 'image/jpeg', credit: '© IGN – photographie aérienne', layer: 'ORTHOIMAGERY.ORTHOPHOTOS' },
+      plan: { label: 'Plan IGN', max: 18, fmt: 'image/png', credit: '© IGN – Plan IGN', layer: 'GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2' },
+      osm: { label: 'OpenStreetMap', max: 19, credit: '© contributeurs OpenStreetMap' }
+    };
+    const mkTileUrl = (key, z, x, y) => key === 'osm'
+      ? `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
+      : `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${MK_SOURCES[key].layer}&STYLE=normal&TILEMATRIXSET=PM&FORMAT=${MK_SOURCES[key].fmt}&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}`;
+    const MK_MAX_PX = 9000000; // taille maxi du plan créé (≈ 3000 × 3000 px) : projet .json raisonnable
+    const MK_FORMATS = { portrait: 1 / Math.SQRT2, paysage: Math.SQRT2, ecran: 0 };
+    const mkScreen = $('mkScreen');
+    const MK = { map: null, layers: {}, source: 'osm', busy: false };
+
+    function openMakePlan() {
+      closeOverlays();
+      mkScreen.hidden = false;
+      loadLeaflet().then(initMkMap).catch(() => { $('mkInfo').textContent = 'Carte en ligne indisponible : vérifiez la connexion Internet.'; });
+    }
+    function closeMakePlan() { mkScreen.hidden = true; }
+    $('mkBack').addEventListener('click', closeMakePlan);
+    function initMkMap() {
+      const L = window.L;
+      if (!MK.map) {
+        MK.layers = {
+          ortho: L.tileLayer(mkTileUrl('ortho', '{z}', '{x}', '{y}'), { maxNativeZoom: 19, maxZoom: 20, attribution: '© IGN' }),
+          plan: L.tileLayer(mkTileUrl('plan', '{z}', '{x}', '{y}'), { maxNativeZoom: 18, maxZoom: 20, attribution: '© IGN' }),
+          osm: L.tileLayer(mkTileUrl('osm', '{z}', '{x}', '{y}'), { maxNativeZoom: 19, maxZoom: 20, attribution: '© contributeurs OpenStreetMap' })
+        };
+        MK.map = L.map('mkMap', { zoomControl: true });
+        MK.layers[MK.source].addTo(MK.map);
+        L.control.scale({ imperial: false }).addTo(MK.map);
+        let v = null;
+        try { v = JSON.parse(localStorage.getItem('mk-map-view') || 'null'); } catch (_) { v = null; }
+        if (v) MK.map.setView(v.c, v.z); else MK.map.setView([44.84, -0.57], 13);
+        MK.map.on('moveend zoomend resize', mkUpdate);
+        MK.map.on('moveend', () => { const c = MK.map.getCenter(); try { localStorage.setItem('mk-map-view', JSON.stringify({ c: [c.lat, c.lng], z: MK.map.getZoom() })); } catch (_) { /* ignoré */ } });
+      }
+      MK.map.invalidateSize();
+      mkUpdate();
+    }
+    $('mkSource').addEventListener('change', (e) => {
+      if (!MK.map) return;
+      MK.map.removeLayer(MK.layers[MK.source]);
+      MK.source = e.target.value;
+      MK.layers[MK.source].addTo(MK.map);
+      mkUpdate();
+    });
+    $('mkFormat').addEventListener('change', mkUpdate);
+    async function mkSearch() {
+      const q = $('mkQ').value.trim();
+      if (!q || !MK.map) return;
+      try {
+        const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=fr&q=' + encodeURIComponent(q));
+        const d = await r.json();
+        if (!d.length) { $('mkInfo').textContent = 'Lieu introuvable : ajoutez le nom de la commune.'; return; }
+        MK.map.setView([Number(d[0].lat), Number(d[0].lon)], 17);
+        if (!$('mkTitle').value.trim()) $('mkTitle').value = q;
+      } catch (_) { $('mkInfo').textContent = 'Recherche impossible (pas de réseau ?).'; }
+    }
+    $('mkGo').addEventListener('click', mkSearch);
+    $('mkQ').addEventListener('keydown', (e) => { if (e.key === 'Enter') mkSearch(); });
+
+    // Cadre du plan (en pixels de la carte affichée) : plus grand rectangle au format choisi, avec une marge.
+    function mkFrame() {
+      const el = $('mkMap'), W = el.clientWidth, H = el.clientHeight, m = 24;
+      const ratio = MK_FORMATS[$('mkFormat').value];
+      let w = W - 2 * m, h = H - 2 * m;
+      if (ratio) { if (w / h > ratio) w = h * ratio; else h = w / ratio; }
+      return { x: (W - w) / 2, y: (H - h) / 2, w, h };
+    }
+    // Niveau de détail : le plus fin possible sans dépasser la taille maxi du plan. Pour les fonds avec
+    // des textes (OpenStreetMap, Plan IGN) destinés à l'impression, on vise ~140 ppp à la taille du papier :
+    // plus fin, les noms de rues deviendraient illisibles une fois imprimés.
+    function mkZoom(f) {
+      const zc = MK.map.getZoom(), fmt = $('mkFormat').value;
+      const size = (z) => ({ z, px: Math.round(f.w * Math.pow(2, z - zc)), py: Math.round(f.h * Math.pow(2, z - zc)) });
+      let z = Math.min(MK_SOURCES[MK.source].max, zc + 3);
+      while (z > zc && size(z).px * size(z).py > MK_MAX_PX) z--;
+      if (MK.source !== 'ortho' && fmt !== 'ecran') {
+        const target = (fmt === 'paysage' ? 27.7 : 19) / 2.54 * 140;
+        while (z > Math.max(1, zc - 3) && Math.abs(size(z - 1).px - target) < Math.abs(size(z).px - target)) z--;
+      }
+      return size(z);
+    }
+    function mkUpdate() {
+      if (!MK.map) return;
+      const f = mkFrame();
+      Object.assign($('mkFrame').style, { left: f.x + 'px', top: f.y + 'px', width: f.w + 'px', height: f.h + 'px' });
+      const nw = MK.map.containerPointToLatLng([f.x, f.y]), se = MK.map.containerPointToLatLng([f.x + f.w, f.y + f.h]);
+      const wm = MK.map.distance(nw, [nw.lat, se.lng]), hm = MK.map.distance(nw, [se.lat, nw.lng]);
+      const zz = mkZoom(f);
+      const tooBig = zz.px * zz.py > MK_MAX_PX;
+      // Échelle à l'impression (zone utile d'une feuille A4 ≈ 19 × 27,7 cm)
+      const fmt = $('mkFormat').value;
+      const paper = fmt === 'paysage' ? [27.7, 19] : [19, 27.7];
+      const sc = Math.max(wm / paper[0], hm / paper[1]) * 100;
+      const nice = [500, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 7500, 10000, 15000, 20000].find((v) => v >= sc) || Math.round(sc);
+      $('mkInfo').innerHTML = `Zone : <strong>${Math.round(wm)} × ${Math.round(hm)} m</strong> · plan de ${zz.px} × ${zz.py} px` +
+        (fmt !== 'ecran' ? ` · imprimé en A4, environ <strong>1/${nice}</strong>` : '') +
+        (tooBig ? ' · <span class="ss-warn">zone trop grande pour ce niveau de détail : zoomez un peu</span>' : '');
+      $('mkCreate').disabled = tooBig;
+    }
+
+    // Une image de carte, avec deux nouvelles tentatives si le serveur ne répond pas.
+    async function loadTile(url) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const img = await new Promise((resolve) => {
+          const im = new Image();
+          im.crossOrigin = 'anonymous';
+          im.onload = () => resolve(im);
+          im.onerror = () => resolve(null);
+          im.src = attempt ? url + (url.includes('?') ? '&' : '?') + 'essai=' + attempt : url;
+        });
+        if (img) return img;
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      }
+      return null;
+    }
+    // Échelle graphique, nord, titre et sources dessinés sur le plan.
+    function mkDecorate(ctx, W, H, mpp, title, credit) {
+      const k = Math.max(1, Math.min(W, H) / 1000);
+      ctx.save();
+      ctx.font = `bold ${Math.round(15 * k)}px Arial, sans-serif`;
+      const box = (x, y, w, h) => { ctx.fillStyle = 'rgba(255,255,255,.88)'; ctx.fillRect(x, y, w, h); };
+      // Échelle
+      const target = (W * 0.22) * mpp;
+      const len = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000].reduce((a, v) => (v <= target ? v : a), 5);
+      const bar = len / mpp, pad = 10 * k, bx = 16 * k, by = H - 16 * k - 34 * k;
+      box(bx - pad, by - pad, bar + 2 * pad, 34 * k + pad);
+      ctx.fillStyle = '#111';
+      ctx.fillRect(bx, by + 18 * k, bar, 5 * k);
+      ctx.fillRect(bx, by + 12 * k, 2 * k, 11 * k);
+      ctx.fillRect(bx + bar - 2 * k, by + 12 * k, 2 * k, 11 * k);
+      ctx.fillText(`${len} m`, bx, by + 10 * k);
+      // Nord
+      const nx = W - 34 * k, ny = 40 * k;
+      box(nx - 22 * k, ny - 30 * k, 44 * k, 56 * k);
+      ctx.beginPath(); ctx.moveTo(nx, ny - 24 * k); ctx.lineTo(nx + 9 * k, ny + 8 * k); ctx.lineTo(nx, ny + 2 * k); ctx.lineTo(nx - 9 * k, ny + 8 * k); ctx.closePath();
+      ctx.fillStyle = '#b42318'; ctx.fill();
+      ctx.fillStyle = '#111'; ctx.textAlign = 'center'; ctx.fillText('N', nx, ny + 22 * k);
+      // Titre
+      ctx.textAlign = 'left';
+      if (title) {
+        ctx.font = `bold ${Math.round(22 * k)}px Arial, sans-serif`;
+        const tw = ctx.measureText(title).width;
+        box(12 * k, 12 * k, tw + 20 * k, 36 * k);
+        ctx.fillStyle = '#111'; ctx.fillText(title, 22 * k, 38 * k);
+      }
+      // Sources (mention obligatoire)
+      ctx.font = `${Math.round(12 * k)}px Arial, sans-serif`;
+      const cw = ctx.measureText(credit).width;
+      box(W - cw - 18 * k, H - 24 * k, cw + 18 * k, 24 * k);
+      ctx.fillStyle = '#333'; ctx.fillText(credit, W - cw - 9 * k, H - 8 * k);
+      ctx.restore();
+    }
+    $('mkCreate').addEventListener('click', async () => {
+      if (!MK.map || MK.busy) return;
+      if (state.markers.length && !confirm('Créer un nouveau plan effacera les postes actuels.\nPensez à enregistrer le projet si besoin. Continuer ?')) return;
+      MK.busy = true;
+      $('mkCreate').disabled = true;
+      try {
+        const f = mkFrame(), { z } = mkZoom(f);
+        const nwLL = MK.map.containerPointToLatLng([f.x, f.y]), seLL = MK.map.containerPointToLatLng([f.x + f.w, f.y + f.h]);
+        const nw = MK.map.project(nwLL, z), se = MK.map.project(seLL, z);
+        const W = Math.round(se.x - nw.x), H = Math.round(se.y - nw.y);
+        const x0 = Math.floor(nw.x / 256), x1 = Math.floor((nw.x + W - 1) / 256), y0 = Math.floor(nw.y / 256), y1 = Math.floor((nw.y + H - 1) / 256);
+        const jobs = [];
+        for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) jobs.push({ x, y });
+        const c = document.createElement('canvas');
+        c.width = W; c.height = H;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#e5e7eb'; ctx.fillRect(0, 0, W, H);
+        let done = 0, failed = 0;
+        const next = async () => {
+          while (jobs.length) {
+            const j = jobs.shift();
+            const img = await loadTile(mkTileUrl(MK.source, z, j.x, j.y));
+            if (img) ctx.drawImage(img, Math.round(j.x * 256 - nw.x), Math.round(j.y * 256 - nw.y)); else failed++;
+            done++;
+            if (done % 8 === 0) $('mkInfo').textContent = `Assemblage du plan… ${done} / ${done + jobs.length} images`;
+          }
+        };
+        await Promise.all(Array.from({ length: 6 }, next));
+        const centre = MK.map.unproject([nw.x + W / 2, nw.y + H / 2], z);
+        const mpp = 156543.03392 * Math.cos(centre.lat * GEO_R) / Math.pow(2, z);
+        const title = $('mkTitle').value.trim();
+        mkDecorate(ctx, W, H, mpp, title, MK_SOURCES[MK.source].credit);
+        const dataUrl = c.toDataURL('image/jpeg', 0.9);
+        // Calage automatique : coins et centre du plan, coordonnées exactes.
+        const cal = [[0, 0], [W, 0], [0, H], [W, H], [W / 2, H / 2]].map(([px, py], i) => {
+          const ll = MK.map.unproject([nw.x + px, nw.y + py], z);
+          return { id: 'auto' + i, x: px, y: py, lat: ll.lat, lon: ll.lng, src: 'auto' };
+        });
+        pdf.doc = null;
+        updatePager();
+        await setBackground(dataUrl, (title || 'Plan') + ' – ' + MK_SOURCES[MK.source].label);
+        startNewPlan();
+        state.geo = { cal, decl: 1.5, proj: 'merc' }; // plan en projection de Mercator : calage exact
+        geoFit();
+        scheduleSave();
+        closeMakePlan();
+        setAddMode(true);
+        toast(`Plan créé et calé (${failed ? failed + ' image(s) manquante(s) · ' : ''}GPS prêt). Placez d’abord le départ / arrivée.`, { label: 'Placer', fn: startPlacingStart });
+      } catch (err) {
+        console.error(err);
+        toast('Impossible de créer le plan (connexion ?).');
+      } finally {
+        MK.busy = false;
+        mkUpdate();
+      }
+    });
+
+    // Carte de course d'orientation fabriquée par OpenOrienteeringMap (site externe), à charger puis caler.
+    function openOomap() {
+      if (!confirm('OpenOrienteeringMap (site gratuit, en anglais) fabrique une carte de course d’orientation à partir d’OpenStreetMap, pour n’importe quel lieu.\n\n' +
+        '1. Cadrez la zone et choisissez l’échelle.\n2. Téléchargez la carte en PDF.\n3. Revenez ici : « Charger un plan », puis menu › Caler la carte.\n\nOuvrir le site ?')) return;
+      window.open('https://oomap.co.uk/', '_blank', 'noopener');
+    }
+
+    $('emptyMakePlan').addEventListener('click', openMakePlan);
+
     const actions = {
       openPlan: requestOpenPlan,
       openProject: requestOpenProject,
@@ -3895,6 +4177,8 @@
       exportHtml,
       previewHtml,
       placeStart: startPlacingStart,
+      makePlan: openMakePlan,
+      oomap: openOomap,
       manualPlace: () => { setAddMode(true); toast('Touchez le plan pour poser un poste, puis orientez-le avec la rosace.'); },
       geoCalib: openGeo,
       geoPhotos: geoPickPhotos,
@@ -6929,6 +7213,7 @@
     document.addEventListener('keydown', (e) => {
       if (!sessionScreen.hidden) return;
       if (!geoScreen.hidden) { if (e.key === 'Escape') closeGeo(); return; }
+      if (!mkScreen.hidden) { if (e.key === 'Escape') closeMakePlan(); return; }
       const inInput = e.target && e.target.tagName === 'INPUT' && e.target.type !== 'range' && e.target.type !== 'checkbox';
       const mod = e.ctrlKey || e.metaKey;
       if (e.key === 'Escape') {
