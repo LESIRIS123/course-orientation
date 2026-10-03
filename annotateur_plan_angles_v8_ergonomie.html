@@ -1174,9 +1174,11 @@
       <li><strong>1. Préparer</strong> : choisissez la <strong>classe</strong> (groupes GR1, GR2…), le <strong>n° de séance</strong> et le <strong>format</strong> :
         <ul>
           <li><strong>Étoile</strong> : le groupe va à une balise de sa carte et revient au départ. Tirage automatique (balises <strong>jamais vues</strong> par ce groupe, distances aller-retour équilibrées à ±10 %) ou <strong>choix à la main</strong> ; un tirage se retouche ensuite.</li>
-          <li><strong>Papillon</strong> : des <strong>pétales</strong> de plusieurs balises (nombre libre), enchaînées sans repasser au départ. Pétales proposés automatiquement ou composés à la main, dans l’ordre du parcours ; chaque groupe les fait dans un <strong>ordre décalé</strong>.</li>
+          <li><strong>Papillon</strong> : des <strong>pétales</strong> de plusieurs balises (nombre libre), enchaînées sans repasser au départ. Pétales proposés automatiquement ou composés à la main, dans l’ordre du parcours ; chaque groupe les fait dans un <strong>ordre décalé</strong> (ou dans le <strong>même ordre</strong> pour tous : interrupteur « Même ordre des pétales »).
+            <br><strong>Balises différentes selon les groupes</strong> (ex. séance 4 du document : parcours A et B de 3 balises, différentes pour chaque groupe) : chaque pétale reçoit une <strong>réserve</strong> de balises (ex. P1 = 65, 66, 68, 71, 74), puis « Répartir la réserve entre les groupes » en donne quelques-unes à chaque groupe, chacun commençant par une balise différente. On peut aussi taper les numéros de chaque groupe dans le tableau (ex. <em>71 ; 68 ; 66</em>), recopiés du document.</li>
         </ul>
       </li>
+      <li><strong>Groupes recomposés</strong> : si les groupes ont changé (absents, nouveaux groupes…), cochez cet interrupteur dans « Nouvelle séance » ou dans la préparation. Le tirage ne tient alors plus compte des balises déjà eues par GR1, GR2… lors des séances précédentes ; les séances suivantes repartent de cette recomposition.</li>
       <li><strong>Privilégier les balises proches du départ</strong> : interrupteur dans « Nouvelle séance », dans le choix manuel et dans la préparation. Le tirage et les propositions vont alors chercher les balises les plus proches (activé d’office en papillon), et les listes de choix sont triées par distance.</li>
       <li><strong>Garder l’ordre de saisie</strong> (choix manuel) : les balises restent dans l’ordre où vous les touchez, ce qui permet d’imposer un itinéraire. Sinon elles sont rangées par numéro.</li>
       <li><strong>Ordre des balises sur la carte</strong> (étoile, si l’ordre de saisie n’est pas conservé) : <strong>Échelonné</strong> (défaut : chaque groupe commence par une balise différente), <strong>Aléatoire</strong> ou <strong>Croissant</strong>. Modifiable après le tirage ; cela ne change que l’ordre imprimé.</li>
@@ -1261,7 +1263,7 @@
     'use strict';
 
     const $ = (id) => document.getElementById(id);
-    const APP_VERSION = '2026-09-30-11'; // version test ← à incrémenter à chaque nouvelle mise en ligne
+    const APP_VERSION = '2026-10-03-1'; // version test ← à incrémenter à chaque nouvelle mise en ligne
     const SVGNS = 'http://www.w3.org/2000/svg';
     const MAX_PIXELS = 16000000; // limite de taille des canvas sur iOS
     const TAP_SLOP = 8;          // déplacement (px) en dessous duquel un toucher reste un « tap »
@@ -4923,7 +4925,15 @@
           <div data-only="etoile"><label for="nsPer">Balises par carte</label>${stepper('nsPer', last && last.perCard ? last.perCard : 6, 1, 40)}</div>
           <div data-only="etoile"><label for="nsTol">Écart de distance accepté (± %)</label>${stepper('nsTol', last ? last.tol : DEFAULT_TOL, 1, 50)}</div>
           <div data-only="papillon"><label for="nsPetals">Nombre de pétales</label>${stepper('nsPetals', last && last.petals ? last.petals.length || 6 : 6, 1, 20)}</div>
-          <div data-only="papillon"><label for="nsPSize">Balises par pétale (modifiable ensuite)</label>${stepper('nsPSize', 2, 1, 8)}</div>
+          <div data-only="papillon"><label for="nsPSize">Balises par pétale (modifiable ensuite)</label>${stepper('nsPSize', last && last.pSize ? last.pSize : 2, 1, 8)}</div>
+        </div>
+        <div class="setting-row" style="padding:0" data-only="papillon">
+          <label for="nsPerGroup">Balises différentes selon les groupes<br><span class="ss-note">comme la séance 4 du document (parcours A et B) : chaque pétale a une réserve de balises, chaque groupe en reçoit quelques-unes (« balises par pétale ») dans son propre ordre ; tous les groupes font P1 puis P2…</span></label>
+          <span class="switch"><input type="checkbox" id="nsPerGroup" ${last && last.perGroup ? 'checked' : ''}><span></span></span>
+        </div>
+        <div class="setting-row" style="padding:0">
+          <label for="nsFresh">Groupes recomposés<br><span class="ss-note">les groupes ont changé (absents…) : ne pas tenir compte des balises déjà eues par GR1, GR2… lors des séances précédentes</span></label>
+          <span class="switch"><input type="checkbox" id="nsFresh"><span></span></span>
         </div>
         <p class="ss-note"><strong>${plural(eligible, 'balise')} avec photo</strong> sur ${plural(state.markers.length, 'balise')} au total${state.markers.some((m) => m.reserved) ? ` (${plural(state.markers.filter((m) => m.reserved).length, 'balise')} réservée(s) à l’évaluation, jamais tirée(s))` : ''}. Chaque groupe reçoit uniquement des balises qu’il n’a <strong>jamais eues</strong> lors des séances précédentes (démarrées).</p>
         <div class="setting-row" style="padding:0">
@@ -4975,7 +4985,8 @@
         id: newId(), num: readInt('nsNum', 1, 99, num), date: new Date().toISOString(),
         groups: readInt('nsGroups', 1, 30, c.groups), perCard: 0, tol: DEFAULT_TOL,
         seed: newSeed(), status: 'prep', penalty: DEFAULT_PENALTY, alertMin: DEFAULT_ALERT, cards: {}, dist: {}, dev: 0, runs: {},
-        withoutPhoto: $('nsNoPhoto').checked, preferNear: $('nsNear').checked, imposed: $('nsImposed').checked, format: 'papillon', petals: [], rot: 0
+        withoutPhoto: $('nsNoPhoto').checked, preferNear: $('nsNear').checked, imposed: $('nsImposed').checked, format: 'papillon', petals: [], rot: 0,
+        freshGroups: $('nsFresh').checked, perGroup: $('nsPerGroup').checked, sameOrder: $('nsPerGroup').checked, pSize: readInt('nsPSize', 1, 8, 2)
       });
       const addSession = (s) => {
         c.groups = s.groups;
@@ -4989,7 +5000,7 @@
       $('nsPapAuto').addEventListener('click', () => {
         const s = newPapSession();
         const n = readInt('nsPetals', 1, 20, 6), k = readInt('nsPSize', 1, 8, 2);
-        if (!proposePetals(c, s, n, k)) {
+        if (!(s.perGroup ? proposePetalsPerGroup(c, s, n, k) : proposePetals(c, s, n, k))) {
           $('nsError').textContent = `Pas assez de balises${s.withoutPhoto ? '' : ' avec photo'} pour faire un pétale de ${k} balises. Ajoutez des photos ou cochez « Inclure les balises sans photo ».`;
           $('nsError').hidden = false;
           return;
@@ -5007,7 +5018,8 @@
           id: newId(), num: readInt('nsNum', 1, 99, num), date: new Date().toISOString(),
           groups: readInt('nsGroups', 1, 30, c.groups), perCard: readInt('nsPer', 1, 40, 6), tol: readInt('nsTol', 1, 50, DEFAULT_TOL),
           seed: newSeed(), status: 'prep', penalty: DEFAULT_PENALTY, alertMin: DEFAULT_ALERT, cards: {}, dist: {}, dev: 0, runs: {},
-          withoutPhoto: $('nsNoPhoto').checked, preferNear: $('nsNear').checked, order: ordre, imposed: $('nsImposed').checked
+          withoutPhoto: $('nsNoPhoto').checked, preferNear: $('nsNear').checked, order: ordre, imposed: $('nsImposed').checked,
+          freshGroups: $('nsFresh').checked
         };
         const res = drawSessionCards(c, s);
         if (res.errors.length) {
@@ -5028,7 +5040,8 @@
           id: newId(), num: readInt('nsNum', 1, 99, num), date: new Date().toISOString(),
           groups: readInt('nsGroups', 1, 30, c.groups), perCard: 0, tol: readInt('nsTol', 1, 50, DEFAULT_TOL),
           seed: newSeed(), status: 'prep', penalty: DEFAULT_PENALTY, alertMin: DEFAULT_ALERT, cards: {}, dist: {}, dev: 0, runs: {},
-          withoutPhoto: $('nsNoPhoto').checked, preferNear: $('nsNear').checked, order: ordre, imposed: $('nsImposed').checked, manual: true
+          withoutPhoto: $('nsNoPhoto').checked, preferNear: $('nsNear').checked, order: ordre, imposed: $('nsImposed').checked, manual: true,
+          freshGroups: $('nsFresh').checked
         };
         for (let g = 1; g <= s.groups; g++) s.cards[g] = [];
         c.groups = s.groups;
@@ -5059,13 +5072,10 @@
       const pools = {};
       for (let g = 1; g <= s.groups; g++) {
         // Balises « déjà vues » : seulement celles des séances réellement démarrées (pas les simples tirages)
-        const seen = new Set();
-        for (const o of c.sessions) {
-          if (o !== s && o.status !== 'prep' && o.cards && o.cards[g]) o.cards[g].forEach((u) => seen.add(u));
-        }
+        const seen = seenBy(c, s, g);
         pools[g] = eligible.filter((m) => !seen.has(m.uid));
         if (pools[g].length < s.perCard) {
-          errors.push(`GR${g} a déjà eu ${plural(eligible.length - pools[g].length, 'balise')} lors des séances précédentes : il n’en reste que ${pools[g].length} jamais vue${pools[g].length > 1 ? 's' : ''} sur ${eligible.length} (il en faut ${s.perCard}). Ajoutez des balises${s.withoutPhoto ? '' : ' avec photo'} ou réduisez le nombre de balises par carte.`);
+          errors.push(`GR${g} a déjà eu ${plural(eligible.length - pools[g].length, 'balise')} lors des séances précédentes : il n’en reste que ${pools[g].length} jamais vue${pools[g].length > 1 ? 's' : ''} sur ${eligible.length} (il en faut ${s.perCard}). Ajoutez des balises${s.withoutPhoto ? '' : ' avec photo'}, réduisez le nombre de balises par carte, ou cochez « Groupes recomposés » si les groupes ont changé.`);
         }
       }
       if (errors.length) return { errors };
@@ -5118,7 +5128,7 @@
 
     // Historique de la préparation d'une séance : chaque changement de cartes (tirage, choix manuel,
     // pétales, ordre…) est empilé, pour pouvoir revenir en arrière puis rétablir.
-    const PREP_KEYS = ['cards', 'petals', 'orders', 'order', 'manual', 'keepOrder', 'preferNear', 'perCard', 'rot', 'seed'];
+    const PREP_KEYS = ['cards', 'petals', 'orders', 'order', 'manual', 'keepOrder', 'preferNear', 'perCard', 'rot', 'seed', 'perGroup', 'sameOrder', 'pSize'];
     const prepSnap = (s) => JSON.stringify(Object.fromEntries(PREP_KEYS.map((k) => [k, s[k]])));
     function prepPush(s) {
       const snap = prepSnap(s);
@@ -5201,10 +5211,14 @@
     }
 
     // Balises déjà données à un groupe lors des séances démarrées de la classe.
+    // « Groupes recomposés » (s.freshGroups) : GR1 n'est plus le même groupe qu'avant, on repart de zéro ;
+    // les séances suivantes ne tiennent compte que de l'historique depuis cette recomposition.
     function seenBy(c, s, g) {
       const seen = new Map(); // uid -> numéro de séance
+      if (s.freshGroups) return seen;
+      const cut = c.sessions.reduce((a, o) => (o !== s && o.freshGroups && o.num <= s.num ? Math.max(a, o.num) : a), -Infinity);
       for (const o of c.sessions) {
-        if (o !== s && o.status !== 'prep' && o.cards && o.cards[g]) o.cards[g].forEach((u) => seen.set(u, o.num));
+        if (o !== s && o.num >= cut && o.status !== 'prep' && o.cards && o.cards[g]) o.cards[g].forEach((u) => seen.set(u, o.num));
       }
       return seen;
     }
@@ -5316,6 +5330,10 @@
           ${locked ? '' : `<div class="setting-row" style="padding:0 0 6px">
             <label for="spNear">Privilégier les balises proches du départ<br><span class="ss-note">pour le prochain tirage automatique et le choix manuel</span></label>
             <span class="switch"><input type="checkbox" id="spNear" ${nearOf(s) ? 'checked' : ''}><span></span></span>
+          </div>
+          <div class="setting-row" style="padding:0 0 6px">
+            <label for="spFresh">Groupes recomposés<br><span class="ss-note">ne pas tenir compte des balises déjà eues par GR1, GR2… lors des séances précédentes</span></label>
+            <span class="switch"><input type="checkbox" id="spFresh" ${s.freshGroups ? 'checked' : ''}><span></span></span>
           </div>`}
           <div class="table-wrap"><table class="res"><thead><tr><th>Groupe</th><th>Balises</th><th class="n">Distance / moyenne</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
           <div class="ss-actions">
@@ -5353,6 +5371,8 @@
       const on = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', fn); };
       const spNearEl = $('spNear');
       if (spNearEl) spNearEl.addEventListener('change', (e) => { s.preferNear = e.target.checked; saveClasses(); renderSessions(); });
+      const spFreshEl = $('spFresh');
+      if (spFreshEl) spFreshEl.addEventListener('change', (e) => { s.freshGroups = e.target.checked; saveClasses(); renderSessions(); });
       bindPrepUndo(c, s);
       on('spReroll', () => {
         if (s.manual && Object.values(s.cards).some((l) => l.length) && !confirm('Remplacer votre choix manuel par un tirage automatique ?\nVous pourrez revenir en arrière avec « Annuler ».')) return;
@@ -5420,7 +5440,7 @@
             ordered: !!s.imposed,
             heading: `GR${g} · ${c.name}`,
             subtitle: pap
-              ? `Séance ${s.num} · papillon · ${petalOrder(s, g).map((p) => `${petalName(p)} : ${s.petals[p].uids.map(uidNum).join('→')}`).join('   ')}`
+              ? `Séance ${s.num} · papillon · ${petalOrder(s, g).map((p) => `${petalName(p)} : ${petalUids(s, p, g).map(uidNum).join('→')}`).join('   ')}`
               : `Séance ${s.num} · ${plural(markers.length, 'balise')} · ${title}`,
             fields: [['Noms :', 190]],
             footer: pap
@@ -5460,24 +5480,40 @@
         pen.text(M, y, `Corrigé — ${c.name} · séance ${s.num}`, 16, { bold: true });
         y -= 16;
         pen.text(M, y, isPap(s)
-          ? `${plural(s.groups, 'groupe')} · papillon · ${plural(s.petals.length, 'pétale')} (ordre décalé d’un groupe à l’autre)`
+          ? `${plural(s.groups, 'groupe')} · papillon · ${plural(s.petals.length, 'pétale')}${perGroup(s) ? ' · balises différentes selon les groupes' : ''} (${s.sameOrder ? 'même ordre pour tous' : 'ordre décalé d’un groupe à l’autre'})`
           : `${plural(s.groups, 'groupe')} · ${plural(s.perCard, 'balise')} par carte · tirage n° ${s.seed} · écart de distance max ±${String(s.dev).replace('.', ',')} %`, 9, { color: '#667085' });
         y -= 24;
       };
       newPage();
       if (isPap(s)) {
-        pen.text(M, y, 'Pétales (longueur de la boucle par rapport à la moyenne)', 11, { bold: true });
+        const pg = perGroup(s);
+        pen.text(M, y, pg ? 'Pétales (réserve de balises)' : 'Pétales (longueur de la boucle par rapport à la moyenne)', 11, { bold: true });
         y -= 18;
         s.petals.forEach((pt, i) => {
           if (y < M + 20) newPage();
           pen.text(M, y, petalName(i), 11, { bold: true });
-          pen.text(M + 40, y, pt.uids.map(uidNum).join(' → ') || '(vide)', 11, { bold: true, color: '#b42318' });
-          const d = (s.pdev && s.pdev[i]) || 0;
-          const ds = `${d > 0 ? '+' : ''}${String(d).replace('.', ',')} %`;
-          pen.text(W - M - textWidth(ds, 10), y, ds, 10, { color: '#667085' });
+          pen.text(M + 40, y, pt.uids.map(uidNum).join(pg ? ', ' : ' → ') || '(vide)', 11, { bold: true, color: '#b42318' });
+          if (!pg) {
+            const d = (s.pdev && s.pdev[i]) || 0;
+            const ds = `${d > 0 ? '+' : ''}${String(d).replace('.', ',')} %`;
+            pen.text(W - M - textWidth(ds, 10), y, ds, 10, { color: '#667085' });
+          }
           pen.line(M, y - 6, W - M, y - 6, 0.3, '#e4e7ec');
           y -= 18;
         });
+        if (pg) {
+          y -= 10;
+          if (y < M + 40) newPage();
+          pen.text(M, y, 'Balises de chaque groupe (dans l’ordre du parcours)', 11, { bold: true });
+          y -= 18;
+          for (let g = 1; g <= s.groups; g++) {
+            if (y < M + 20) newPage();
+            pen.text(M, y, `GR${g}`, 11, { bold: true });
+            pen.text(M + 50, y, petalOrder(s, g).map((q) => `${petalName(q)} : ${petalUids(s, q, g).map(uidNum).join(' → ')}`).join('     '), 11, { bold: true, color: '#b42318' });
+            pen.line(M, y - 6, W - M, y - 6, 0.3, '#e4e7ec');
+            y -= 18;
+          }
+        }
         y -= 10;
         pen.text(M, y, 'Ordre des pétales par groupe', 11, { bold: true });
         y -= 18;
@@ -5548,7 +5584,7 @@
         let ok = 0, err = 0, n = 0, pc = 0, t = 0;
         const order = petalOrder(s, g);
         for (const p of order) {
-          const uids = s.petals[p].uids;
+          const uids = petalUids(s, p, g);
           let all = uids.length > 0;
           n += uids.length;
           for (const u of uids) {
@@ -6114,11 +6150,11 @@
           if (isPap(s)) {
             // Papillon : une ligne par pétale (le temps est mesuré sur la boucle entière)
             for (const p of petalOrder(s, g)) {
-              const uids = s.petals[p].uids;
+              const uids = petalUids(s, p, g);
               const ok = uids.filter((u) => r.results[u] && r.results[u].ok).length;
               const e = uids.reduce((a, u) => a + ((r.results[u] && r.results[u].e) || 0), 0);
               const t = (r.ptimes && r.ptimes[p]) || 0;
-              lines.push([c.name, s.num, date, `GR${g}`, R.rank, `${petalName(p)} (${uids.map(uidNum).join('→')})`, `${ok}/${uids.length}`, e, Math.round(t / 1000), fmtTime(t), String((s.pdev && s.pdev[p]) ?? '').replace('.', ','), '', uids.filter((u) => r.results[u] && r.results[u].notes).map((u) => `${uidNum(u)} : ${notesCsv(r.results[u].notes)}`).join(' / ')].map(q).join(';'));
+              lines.push([c.name, s.num, date, `GR${g}`, R.rank, `${petalName(p)} (${uids.map(uidNum).join('→')})`, `${ok}/${uids.length}`, e, Math.round(t / 1000), fmtTime(t), String(petalDev(s, p, g)).replace('.', ','), '', uids.filter((u) => r.results[u] && r.results[u].notes).map((u) => `${uidNum(u)} : ${notesCsv(r.results[u].notes)}`).join(' / ')].map(q).join(';'));
             }
             lines.push([c.name, s.num, date, `GR${g}`, R.rank, 'TOTAL', `${R.pc}/${R.pn} pétales · ${R.ok}/${R.n} balises`, R.err, Math.round(R.t / 1000), fmtTime(R.t), '', Math.round(pauseTotalOf(r) / 1000), ''].map(q).join(';'));
             continue;
@@ -6147,8 +6183,31 @@
     // la proposition automatique choisissait déjà toujours les balises les plus proches du départ).
     const nearOf = (s) => (s.preferNear !== undefined ? s.preferNear : isPap(s));
     const petalName = (i) => `P${i + 1}`;
-    const petalLabel = (s, i) => `${petalName(i)} (${(s.petals[i] ? s.petals[i].uids : []).map(uidNum).join(' → ') || 'vide'})`;
+    // « Balises différentes selon les groupes » (ex. séance 4 du document : parcours A et B, chaque groupe
+    // a ses propres balises) : pt.uids devient la RÉSERVE du pétale, et pt.byGroup[g] la liste du groupe g.
+    const perGroup = (s) => isPap(s) && !!s.perGroup;
+    const petalUids = (s, p, g) => {
+      const pt = s.petals[p];
+      if (!pt) return [];
+      return perGroup(s) ? ((pt.byGroup && pt.byGroup[g]) || []) : pt.uids;
+    };
+    const petalLabel = (s, i, g) => `${petalName(i)} (${petalUids(s, i, g).map(uidNum).join(' → ') || 'vide'})`;
     const petalOrder = (s, g) => (s.orders && s.orders[g]) || [];
+    // Écart de longueur de la boucle (en %) : par rapport aux autres pétales, ou, en mode « par groupe »,
+    // par rapport aux autres groupes sur le même pétale.
+    const petalDev = (s, p, g) => (perGroup(s) ? ((s.gpdev && s.gpdev[g] && s.gpdev[g][p]) || 0) : ((s.pdev && s.pdev[p]) || 0));
+    // Longueur de la boucle départ → balises → départ (unités du plan)
+    function loopLen(uids) {
+      if (!state.start || !uids.length) return 0;
+      let d = 0, prev = state.start;
+      for (const u of uids) {
+        const m = markerByUid(u);
+        if (!m) continue;
+        d += Math.hypot(m.x - prev.x, m.y - prev.y);
+        prev = m;
+      }
+      return d + Math.hypot(prev.x - state.start.x, prev.y - state.start.y);
+    }
 
     // Recalcule l'ordre des pétales de chaque groupe (rotation), ses balises, et la longueur des boucles.
     function syncPetals(s) {
@@ -6156,28 +6215,90 @@
       s.orders = {};
       s.cards = {};
       for (let g = 1; g <= s.groups; g++) {
-        const first = n ? (g - 1 + (s.rot || 0)) % n : 0;
-        s.orders[g] = [...Array(n).keys()].map((k) => (first + k) % n).filter((p) => s.petals[p].uids.length);
-        s.cards[g] = s.orders[g].flatMap((p) => s.petals[p].uids);
+        // « Même ordre pour tous » : tous les groupes font P1 puis P2… (parcours A puis B du document)
+        const first = n && !s.sameOrder ? (g - 1 + (s.rot || 0)) % n : 0;
+        s.orders[g] = [...Array(n).keys()].map((k) => (first + k) % n).filter((p) => petalUids(s, p, g).length);
+        s.cards[g] = s.orders[g].flatMap((p) => petalUids(s, p, g));
       }
-      s.plen = s.petals.map((pt) => {
-        if (!state.start || !pt.uids.length) return 0;
-        let d = 0, prev = state.start;
-        for (const u of pt.uids) {
-          const m = markerByUid(u);
-          if (!m) continue;
-          d += Math.hypot(m.x - prev.x, m.y - prev.y);
-          prev = m;
-        }
-        return d + Math.hypot(prev.x - state.start.x, prev.y - state.start.y);
-      });
+      s.plen = s.petals.map((pt) => loopLen(pt.uids));
       const filled = s.plen.filter((v) => v > 0);
       const mean = filled.length ? filled.reduce((a, b) => a + b, 0) / filled.length : 0;
       s.pdev = s.plen.map((v) => (mean && v ? Math.round((v / mean - 1) * 1000) / 10 : 0));
       s.dist = {};
       for (let g = 1; g <= s.groups; g++) s.dist[g] = 0;
-      s.dev = Math.max(0, ...s.pdev.map(Math.abs));
+      if (perGroup(s)) {
+        s.gpdev = {};
+        for (let g = 1; g <= s.groups; g++) s.gpdev[g] = {};
+        s.petals.forEach((pt, p) => {
+          const lens = {};
+          for (let g = 1; g <= s.groups; g++) lens[g] = loopLen(petalUids(s, p, g));
+          const f = Object.values(lens).filter((v) => v > 0);
+          const mu = f.length ? f.reduce((a, b) => a + b, 0) / f.length : 0;
+          for (let g = 1; g <= s.groups; g++) s.gpdev[g][p] = mu && lens[g] ? Math.round((lens[g] / mu - 1) * 1000) / 10 : 0;
+        });
+        s.dev = Math.max(0, ...Object.values(s.gpdev).flatMap((o) => Object.values(o).map(Math.abs)));
+      } else {
+        delete s.gpdev;
+        s.dev = Math.max(0, ...s.pdev.map(Math.abs));
+      }
       s.perCard = Math.max(0, ...Object.values(s.cards).map((l) => l.length));
+    }
+
+    // Mode « par groupe » : répartit la réserve de chaque pétale entre les groupes, k balises chacun.
+    // Chaque groupe commence par une balise différente (départs étalés), chaque balise sert à peu près
+    // le même nombre de fois, les boucles ont des longueurs proches ; ordre = boucle la plus courte.
+    function spreadPetals(s, k) {
+      const rng = mulberry32((s.seed || (s.seed = newSeed())) * 7 + 3);
+      const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+      const bestOrder = (first, rest) => { // meilleure boucle départ → first → (rest permuté) → départ
+        if (rest.length > 6) { // trop de permutations : plus proche voisin
+          const out = [], left = rest.slice();
+          let cur = markerByUid(first);
+          while (left.length) {
+            left.sort((a, b) => { const ma = markerByUid(a), mb = markerByUid(b); return Math.hypot(ma.x - cur.x, ma.y - cur.y) - Math.hypot(mb.x - cur.x, mb.y - cur.y); });
+            out.push(left.shift());
+            cur = markerByUid(out[out.length - 1]);
+          }
+          return [first, ...out];
+        }
+        let best = null, bl = Infinity;
+        const perm = (arr, pre) => {
+          if (!arr.length) { const l = loopLen([first, ...pre]); if (l < bl) { bl = l; best = [first, ...pre]; } return; }
+          arr.forEach((x, i) => perm(arr.filter((_, j) => j !== i), pre.concat([x])));
+        };
+        perm(rest, []);
+        return best;
+      };
+      s.petals.forEach((pt) => {
+        const pool = pt.uids.filter((u) => markerByUid(u));
+        pt.byGroup = {};
+        if (!pool.length) return;
+        const kk = Math.min(Math.max(1, k), pool.length);
+        let best = null, bestCost = Infinity;
+        for (let trial = 0; trial < 400; trial++) {
+          const firsts = shuffle(pool.slice());
+          const use = new Map(pool.map((u) => [u, 0]));
+          const plan = {};
+          for (let g = 1; g <= s.groups; g++) {
+            const first = firsts[(g - 1) % firsts.length];
+            use.set(first, use.get(first) + 1);
+            const rest = shuffle(pool.filter((u) => u !== first)).sort((a, b) => use.get(a) - use.get(b)).slice(0, kk - 1);
+            rest.forEach((u) => use.set(u, use.get(u) + 1));
+            plan[g] = bestOrder(first, rest);
+          }
+          const counts = [...use.values()], mu = counts.reduce((a, b) => a + b, 0) / counts.length;
+          const lens = Object.values(plan).map(loopLen), ml = lens.reduce((a, b) => a + b, 0) / lens.length || 1;
+          // même suite de balises pour deux groupes = ils se suivent toute la boucle : à éviter
+          const seq = new Set(Object.values(plan).map((l) => l.join(',')));
+          const cost = counts.reduce((a, v) => a + (v - mu) ** 2, 0) +
+            4 * lens.reduce((a, v) => a + ((v / ml - 1) * 10) ** 2, 0) / lens.length +
+            2 * Math.max(...lens.map((v) => ((v / ml - 1) * 10) ** 2)) +
+            3 * (s.groups - seq.size);
+          if (cost < bestCost) { bestCost = cost; best = plan; }
+        }
+        pt.byGroup = best;
+      });
+      syncPetals(s);
     }
 
     // Proposition automatique : balises jamais vues de préférence, regroupées par direction.
@@ -6206,12 +6327,34 @@
       syncPetals(s);
       return true;
     }
+    // Mode « par groupe » : chaque pétale reçoit une réserve de balises (proposition automatique),
+    // puis chaque groupe en reçoit k.
+    function proposePetalsPerGroup(c, s, count, k) {
+      if (!proposePetals(c, s, count, Math.max(k + 2, Math.ceil(k * 1.6)))) return false;
+      spreadPetals(s, k);
+      return true;
+    }
 
     // ---------- Préparer (papillon) ----------
+    const fmtDev = (d) => `${d > 0 ? '+' : ''}${String(d).replace('.', ',')} %`;
+    // « 71 ; 68 ; 66 », « 71 68 66 », « 71,68,66 »… → uids (numéros inconnus signalés)
+    function parseBaliseList(txt) {
+      const uids = [], unknown = [], dup = [];
+      for (const tok of String(txt).split(/[^0-9]+/).filter(Boolean)) {
+        const m = state.markers.find((x) => Number(x.number) === Number(tok));
+        if (!m) unknown.push(tok);
+        else if (uids.includes(m.uid)) dup.push(tok);
+        else uids.push(m.uid);
+      }
+      return { uids, unknown, dup };
+    }
+    const groupPetalsK = (s) => s.pSize || Math.max(1, Math.min(3, ...s.petals.map((p) => p.uids.length).filter(Boolean)));
+
     function renderPapillonPrep(c, s) {
       if (!s.petals) s.petals = [];
       syncPetals(s);
       const locked = s.status !== 'prep';
+      const pg = perGroup(s);
       const ap = clamp(ssUI.petal || 0, 0, Math.max(0, s.petals.length - 1));
       ssUI.petal = ap;
       const where = new Map();
@@ -6223,8 +6366,8 @@
         const d = s.pdev[i] || 0;
         return `<tr><td>${locked ? `<strong>${petalName(i)}</strong>`
             : `<button class="btn" data-pp="${i}" aria-pressed="${i === ap}">${petalName(i)}</button>`}</td>
-          <td class="nums">${pt.uids.map(uidNum).join(' → ') || '<span class="ss-warn">vide</span>'}</td>
-          <td class="n ${Math.abs(d) > 25 ? 'ss-warn' : ''}">${pt.uids.length ? `${d > 0 ? '+' : ''}${String(d).replace('.', ',')} %` : '—'}</td>
+          <td class="nums">${pt.uids.map(uidNum).join(pg ? ' · ' : ' → ') || '<span class="ss-warn">vide</span>'}</td>
+          <td class="n ${!pg && Math.abs(d) > 25 ? 'ss-warn' : ''}">${pg ? (pt.uids.length ? plural(pt.uids.length, 'balise') : '—') : pt.uids.length ? fmtDev(d) : '—'}</td>
           <td class="n">${locked ? '' : `<button class="btn icon ghost" data-pdel="${i}" aria-label="Supprimer ${petalName(i)}"><svg class="i"><use href="#i-trash"/></svg></button>`}</td></tr>`;
       }).join('');
 
@@ -6235,7 +6378,7 @@
         if (!hasPhoto(m)) cls.push('nophoto');
         if (m.reserved) cls.push('reserved');
         const tag = w !== undefined && w !== ap ? petalName(w) : '';
-        const pos = w === ap ? s.petals[ap].uids.indexOf(m.uid) + 1 : 0;
+        const pos = w === ap && !pg ? s.petals[ap].uids.indexOf(m.uid) + 1 : 0;
         const title = `Balise ${m.number}` + (w !== undefined ? ` — dans ${petalName(w)}` : '') +
           (seenCount.has(m.uid) ? ` — déjà eue par ${plural(seenCount.get(m.uid), 'groupe')}` : '') + (hasPhoto(m) ? '' : ' — sans photo');
         return `<button class="${cls.join(' ')}" data-uid="${m.uid}" aria-pressed="${w === ap}" title="${escapeHtml(title)}">${m.number}` +
@@ -6247,28 +6390,56 @@
         orders.push(`<tr><td><strong>GR${g}</strong></td><td>${petalOrder(s, g).map(petalName).join(' → ') || '—'}</td></tr>`);
       }
 
+      // Mode « par groupe » : une case par groupe et par pétale, où l'on tape les numéros dans l'ordre
+      let gcard = '';
+      if (pg) {
+        const head = s.petals.map((_, p) => `<th>${petalName(p)}</th>`).join('');
+        const grows = [];
+        for (let g = 1; g <= s.groups; g++) {
+          const cells = s.petals.map((_, p) => {
+            const l = petalUids(s, p, g), d = petalDev(s, p, g);
+            const devCell = `<span class="ss-note ${Math.abs(d) > 25 ? 'ss-warn' : ''}" data-gdev="${g}:${p}">${l.length > 1 ? fmtDev(d) : ''}</span>`;
+            return locked
+              ? `<td class="nums">${l.map(uidNum).join(' → ') || '—'} ${devCell}</td>`
+              : `<td><input class="ss-input" data-gp="${g}:${p}" inputmode="decimal" autocomplete="off" value="${l.map(uidNum).join(' ; ')}" placeholder="ex. 71 ; 68 ; 66" style="width:100%;min-width:120px">${devCell}</td>`;
+          }).join('');
+          grows.push(`<tr><td><strong>GR${g}</strong></td>${cells}</tr>`);
+        }
+        gcard = `<div class="ss-card"><h3>Balises de chaque groupe <span class="ss-note">dans l’ordre du parcours</span></h3>
+          ${locked ? '' : `<p class="ss-note">Touchez « Répartir » pour donner à chaque groupe des balises de la réserve de chaque pétale (chaque groupe commence par une balise différente), ou tapez directement les numéros, séparés par des espaces ou des points-virgules (ex. <strong>71 ; 68 ; 66</strong>), comme dans le document de séance. Le pourcentage compare la longueur de la boucle à celle des autres groupes.</p>
+          <div class="ss-fields"><div><label for="ppK">Balises par groupe dans chaque pétale</label>${stepper('ppK', groupPetalsK(s), 1, 12)}</div></div>
+          <div class="ss-actions"><button class="btn primary" id="ppSpread"><svg class="i"><use href="#i-new"/></svg>Répartir la réserve entre les groupes</button></div>`}
+          <div class="table-wrap" style="margin-top:8px"><table class="res"><thead><tr><th>Groupe</th>${head}</tr></thead><tbody>${grows.join('')}</tbody></table></div>
+        </div>`;
+      }
+
+      const sw = (id, on, label, note) => `<div class="setting-row" style="padding:0;margin-top:6px">
+            <label for="${id}">${label}<br><span class="ss-note">${note}</span></label>
+            <span class="switch"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}><span></span></span>
+          </div>`;
+
       ssBody.innerHTML = `<div class="ss-card">
-          <h3>${escapeHtml(c.name)} — séance ${s.num} <span class="ss-note">papillon · ${plural(s.groups, 'groupe')} · ${plural(s.petals.length, 'pétale')}${s.imposed ? ' · <strong class="ss-warn">ordre imposé</strong>' : ''}${s.withoutPhoto ? ' · balises sans photo incluses' : ''}</span></h3>
-          ${locked ? '' : `<div class="setting-row" style="padding:0 0 6px">
-            <label for="ppNear">Privilégier les balises proches du départ<br><span class="ss-note">proposition automatique et liste ci-dessous</span></label>
-            <span class="switch"><input type="checkbox" id="ppNear" ${nearOf(s) ? 'checked' : ''}><span></span></span>
-          </div>`}
-          ${locked ? '' : '<p class="ss-note">1. Touchez un pétale (P1, P2…). 2. Touchez les balises dans l’ordre du parcours : le petit chiffre indique leur rang dans le pétale. Touchez à nouveau pour retirer ; une balise d’un autre pétale y est déplacée.</p>'}
-          <div class="table-wrap"><table class="res"><thead><tr><th>Pétale</th><th>Balises (dans l’ordre)</th><th class="n">Boucle / moyenne</th><th></th></tr></thead><tbody>${prow || '<tr><td colspan="4" class="ss-note">Aucun pétale.</td></tr>'}</tbody></table></div>
-          ${chips ? `<p style="margin-top:12px"><strong>${petalName(ap)}</strong> : ${plural(s.petals[ap].uids.length, 'balise')}</p><div class="chip-grid">${chips}</div>
+          <h3>${escapeHtml(c.name)} — séance ${s.num} <span class="ss-note">papillon · ${plural(s.groups, 'groupe')} · ${plural(s.petals.length, 'pétale')}${pg ? ' · balises différentes selon les groupes' : ''}${s.sameOrder ? ' · même ordre pour tous' : ''}${s.imposed ? ' · <strong class="ss-warn">ordre imposé</strong>' : ''}${s.withoutPhoto ? ' · balises sans photo incluses' : ''}${s.freshGroups ? ' · groupes recomposés' : ''}</span></h3>
+          ${locked ? '' : sw('ppPerGroup', pg, 'Balises différentes selon les groupes', 'chaque pétale (= parcours A, B…) a une réserve de balises ; chaque groupe en reçoit quelques-unes, dans son propre ordre')}
+          ${locked ? '' : sw('ppNear', nearOf(s), 'Privilégier les balises proches du départ', 'proposition automatique et liste ci-dessous')}
+          ${locked ? '' : sw('ppFresh', s.freshGroups, 'Groupes recomposés', 'ne pas tenir compte des balises déjà eues par GR1, GR2… lors des séances précédentes')}
+          ${locked ? '' : pg
+            ? '<p class="ss-note">1. Touchez un pétale (P1, P2…). 2. Touchez les balises de sa <strong>réserve</strong> (toutes celles que les groupes peuvent avoir dans ce pétale). Touchez à nouveau pour retirer ; une balise d’un autre pétale y est déplacée. 3. Répartissez-les entre les groupes plus bas.</p>'
+            : '<p class="ss-note">1. Touchez un pétale (P1, P2…). 2. Touchez les balises dans l’ordre du parcours : le petit chiffre indique leur rang dans le pétale. Touchez à nouveau pour retirer ; une balise d’un autre pétale y est déplacée.</p>'}
+          <div class="table-wrap"><table class="res"><thead><tr><th>Pétale</th><th>${pg ? 'Réserve de balises' : 'Balises (dans l’ordre)'}</th><th class="n">${pg ? 'Réserve' : 'Boucle / moyenne'}</th><th></th></tr></thead><tbody>${prow || '<tr><td colspan="4" class="ss-note">Aucun pétale.</td></tr>'}</tbody></table></div>
+          ${chips ? `<p style="margin-top:12px"><strong>${petalName(ap)}</strong> : ${plural(s.petals[ap].uids.length, 'balise')}${pg ? ' en réserve' : ''}</p><div class="chip-grid">${chips}</div>
             <div class="legend"><span class="l-sel">dans ce pétale</span><span class="l-seen">déjà eue lors d’une séance précédente</span><span class="l-nophoto">sans photo</span><span class="l-res">réservée évaluation</span></div>` : ''}
-          ${locked ? '' : `<div class="setting-row" style="padding:0;margin-top:6px">
-            <label for="ppImposed">Ordre imposé aux élèves<br><span class="ss-note">pétales et balises dans l’ordre indiqué</span></label>
-            <span class="switch"><input type="checkbox" id="ppImposed" ${s.imposed ? 'checked' : ''}><span></span></span>
-          </div>
+          ${locked ? '' : `${sw('ppSame', s.sameOrder, 'Même ordre des pétales pour tous les groupes', 'tous font P1, puis P2… (parcours A puis B) ; sinon chaque groupe commence par un pétale différent')}
+          ${sw('ppImposed', s.imposed, 'Ordre imposé aux élèves', 'pétales et balises dans l’ordre indiqué')}
           <div class="ss-actions">
             ${prepUndoBtns(s)}
             <button class="btn" id="ppAdd"><svg class="i"><use href="#i-plus"/></svg>Ajouter un pétale</button>
-            <button class="btn" id="ppRot"><svg class="i"><use href="#i-cw"/></svg>Décaler les départs</button>
+            ${s.sameOrder ? '' : '<button class="btn" id="ppRot"><svg class="i"><use href="#i-cw"/></svg>Décaler les départs</button>'}
             <button class="btn" id="ppAuto"><svg class="i"><use href="#i-new"/></svg>Nouvelle proposition automatique</button>
           </div>`}
         </div>
-        <div class="ss-card"><h3>Ordre des pétales par groupe <span class="ss-note">chaque groupe commence par un pétale différent</span></h3>
+        ${gcard}
+        <div class="ss-card"><h3>Ordre des pétales par groupe <span class="ss-note">${s.sameOrder ? 'le même pour tous les groupes' : 'chaque groupe commence par un pétale différent'}</span></h3>
           <div class="table-wrap"><table class="res"><tbody>${orders.join('')}</tbody></table></div>
           <div class="ss-actions">
             <button class="btn" data-spdf="A4"><svg class="i"><use href="#i-pdf"/></svg>Cartes PDF A4</button>
@@ -6288,14 +6459,28 @@
 
       const redo = () => { syncPetals(s); saveClasses(); renderPapillonPrep(c, s); };
       const on = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', fn); };
-      const ppNearEl = $('ppNear');
-      if (ppNearEl) ppNearEl.addEventListener('change', (e) => { s.preferNear = e.target.checked; saveClasses(); renderPapillonPrep(c, s); });
+      const onSwitch = (id, fn) => { const el = $(id); if (el) el.addEventListener('change', (e) => fn(e.target.checked)); };
+      bindSteppers(ssBody);
+      onSwitch('ppNear', (v) => { s.preferNear = v; saveClasses(); renderPapillonPrep(c, s); });
+      onSwitch('ppFresh', (v) => { s.freshGroups = v; saveClasses(); renderPapillonPrep(c, s); });
+      onSwitch('ppSame', (v) => { prepPush(s); s.sameOrder = v; redo(); });
+      onSwitch('ppImposed', (v) => { s.imposed = v; saveClasses(); renderPapillonPrep(c, s); });
+      onSwitch('ppPerGroup', (v) => {
+        prepPush(s);
+        s.perGroup = v;
+        if (v) {
+          if (s.sameOrder === undefined) s.sameOrder = true;
+          // Première activation : les groupes reçoivent tout de suite des balises de la réserve
+          if (s.petals.some((p) => p.uids.length) && !s.petals.some((p) => p.byGroup && Object.values(p.byGroup).some((l) => l.length))) spreadPetals(s, groupPetalsK(s));
+        }
+        redo();
+      });
       bindPrepUndo(c, s);
       ssBody.querySelectorAll('[data-pp]').forEach((b) => b.addEventListener('click', () => { ssUI.petal = Number(b.dataset.pp); renderPapillonPrep(c, s); }));
       ssBody.querySelectorAll('[data-pdel]').forEach((b) => b.addEventListener('click', () => {
         const i = Number(b.dataset.pdel);
         prepPush(s);
-        if (s.petals[i].uids.length && !confirm(`Supprimer le pétale ${petalLabel(s, i)} ?`)) return;
+        if (s.petals[i].uids.length && !confirm(`Supprimer le pétale ${petalName(i)} (${s.petals[i].uids.map(uidNum).join(', ')}) ?`)) return;
         s.petals.splice(i, 1);
         ssUI.petal = Math.max(0, i - 1);
         redo();
@@ -6307,15 +6492,59 @@
         if (w !== ap) s.petals[ap].uids.push(u);
         redo();
       }));
-      const ppImposed = $('ppImposed');
-      if (ppImposed) ppImposed.addEventListener('change', (e) => { s.imposed = e.target.checked; saveClasses(); renderPapillonPrep(c, s); });
+      // Saisie des numéros d'un groupe : mise à jour sur place (pas de réaffichage, pour ne pas perdre la case suivante)
+      ssBody.querySelectorAll('input[data-gp]').forEach((inp) => inp.addEventListener('change', () => {
+        const [g, p] = inp.dataset.gp.split(':').map(Number);
+        const { uids, unknown, dup } = parseBaliseList(inp.value);
+        const other = new Set(s.petals.flatMap((_, q) => (q === p ? [] : petalUids(s, q, g))));
+        const twice = uids.filter((u) => other.has(u));
+        prepPush(s);
+        const pt = s.petals[p];
+        pt.byGroup = pt.byGroup || {};
+        pt.byGroup[g] = uids.filter((u) => !other.has(u));
+        syncPetals(s);
+        saveClasses();
+        inp.value = pt.byGroup[g].map(uidNum).join(' ; ');
+        for (let q = 0; q < s.petals.length; q++) {
+          const el = ssBody.querySelector(`[data-gdev="${g}:${q}"]`);
+          const d = petalDev(s, q, g);
+          if (el) { el.textContent = petalUids(s, q, g).length > 1 ? fmtDev(d) : ''; el.classList.toggle('ss-warn', Math.abs(d) > 25); }
+        }
+        const ub = $('prepUndo');
+        if (ub) ub.disabled = false;
+        const msg = [];
+        if (unknown.length) msg.push(`pas de balise n° ${unknown.join(', ')} sur le plan`);
+        if (dup.length) msg.push(`n° ${dup.join(', ')} en double`);
+        if (twice.length) msg.push(`${twice.map(uidNum).join(', ')} déjà dans un autre pétale de GR${g}`);
+        if (msg.length) toast(`GR${g} · ${petalName(p)} : ${msg.join(' ; ')} (ignoré).`);
+      }));
+      on('ppSpread', () => {
+        if (!s.petals.some((p) => p.uids.length)) { toast('Mettez d’abord des balises dans la réserve des pétales.'); return; }
+        const hasLists = s.petals.some((p) => p.byGroup && Object.values(p.byGroup).some((l) => l.length));
+        if (hasLists && !confirm('Remplacer les balises de tous les groupes par une nouvelle répartition ?\nVous pourrez revenir en arrière avec « Annuler ».')) return;
+        prepPush(s);
+        s.pSize = readInt('ppK', 1, 12, groupPetalsK(s));
+        if (hasLists) s.seed = newSeed();
+        spreadPetals(s, s.pSize);
+        saveClasses();
+        renderPapillonPrep(c, s);
+      });
+      const ppK = $('ppK');
+      if (ppK) ppK.addEventListener('change', () => { s.pSize = readInt('ppK', 1, 12, groupPetalsK(s)); saveClasses(); });
       on('ppAdd', () => { prepPush(s); s.petals.push({ uids: [] }); ssUI.petal = s.petals.length - 1; redo(); });
       on('ppRot', () => { prepPush(s); s.rot = ((s.rot || 0) + 1) % Math.max(1, s.petals.length); redo(); });
       on('ppAuto', () => {
         if (s.petals.some((p) => p.uids.length) && !confirm('Remplacer tous les pétales par une nouvelle proposition automatique ?\nVous pourrez revenir en arrière avec « Annuler ».')) return;
         prepPush(s);
-        const size = Math.max(1, Math.round(s.petals.reduce((a, p) => a + p.uids.length, 0) / Math.max(1, s.petals.length)) || 2);
-        if (!proposePetals(c, s, Math.max(1, s.petals.length), size)) toast('Pas assez de balises disponibles.');
+        let ok;
+        if (pg) {
+          s.seed = newSeed();
+          ok = proposePetalsPerGroup(c, s, Math.max(1, s.petals.length), groupPetalsK(s));
+        } else {
+          const size = Math.max(1, Math.round(s.petals.reduce((a, p) => a + p.uids.length, 0) / Math.max(1, s.petals.length)) || 2);
+          ok = proposePetals(c, s, Math.max(1, s.petals.length), size);
+        }
+        if (!ok) toast('Pas assez de balises disponibles.');
         ssUI.petal = 0;
         saveClasses();
         renderPapillonPrep(c, s);
@@ -6327,7 +6556,7 @@
       on('spStart', () => {
         const empty = [];
         for (let g = 1; g <= s.groups; g++) if (!(s.cards[g] || []).length) empty.push(`GR${g}`);
-        if (empty.length) { toast('Ajoutez des balises dans les pétales avant de démarrer.'); return; }
+        if (empty.length) { toast(pg ? `Pas de balise pour ${empty.join(', ')} : complétez le tableau « Balises de chaque groupe ».` : 'Ajoutez des balises dans les pétales avant de démarrer.'); return; }
         s.status = 'running';
         s.startedAt = Date.now();
         for (let g = 1; g <= s.groups; g++) s.runs[g] = newRun();
@@ -6349,15 +6578,15 @@
       const r = runOf(s, g), order = petalOrder(s, g), pi = r.pi || 0;
       if (r.state === 'done' || r.state === 'stopped' || pi >= order.length) return '';
       const p = order[pi];
-      const retry = r.pending && r.pending.length < s.petals[p].uids.length;
+      const retry = r.pending && r.pending.length < petalUids(s, p, g).length;
       return retry
         ? `<span class="gretry">↻ ${petalName(p)} : ${r.state === 'out' ? 'refaire' : 'à refaire au départ'} ${r.pending.map(uidNum).join(', ')}</span>`
-        : `<span class="gmeta"><strong>${r.state === 'out' ? 'En cours' : 'Prochain'} : ${petalLabel(s, p)}</strong></span>`;
+        : `<span class="gmeta"><strong>${r.state === 'out' ? 'En cours' : 'Prochain'} : ${petalLabel(s, p, g)}</strong></span>`;
     }
     function petalChips(s, g) {
       const r = runOf(s, g), order = petalOrder(s, g), pi = r.pi || 0;
       const chips = order.map((p, k) => {
-        const marks = s.petals[p].uids.map((u) => {
+        const marks = petalUids(s, p, g).map((u) => {
           const x = r.results[u];
           const t = noteShort(lastNote(x));
           return `<b>${uidNum(u)}</b>${x && x.ok ? '✓' : x && x.e ? '✗' : ''}${t ? `<i title="${escapeHtml(noteText(lastNote(x)))}">${escapeHtml(t)}</i>` : ''}`;
@@ -6366,7 +6595,7 @@
         const st = r.pdone && r.pdone[p];
         const active = k === pi && (r.state === 'out' || r.state === 'idle');
         const cls = st === 'ok' ? 'ok' : st === 'partial' ? 'ko' : active ? 'cur' : '';
-        return `<span class="bc ${cls}" title="${petalLabel(s, p)}">${petalName(p)} : ${marks}${t}</span>`;
+        return `<span class="bc ${cls}" title="${petalLabel(s, p, g)}">${petalName(p)} : ${marks}${t}</span>`;
       });
       return `<span class="bchips">${chips.join('')}</span>`;
     }
@@ -6384,10 +6613,10 @@
         r.state = 'out';
         r.tripStart = Date.now();
         r.alerted = false;
-        if (!r.pending) r.pending = s.petals[order[pi]].uids.slice();
+        if (!r.pending) r.pending = petalUids(s, order[pi], g).slice();
         saveClasses();
         renderCourse(c, s);
-        toast(`GR${g} est ${wasResting ? 'reparti' : 'parti'} sur ${petalLabel(s, order[pi])}.`, { label: 'Annuler', fn: () => { undoRun(s, g); renderCourse(c, s); } });
+        toast(`GR${g} est ${wasResting ? 'reparti' : 'parti'} sur ${petalLabel(s, order[pi], g)}.`, { label: 'Annuler', fn: () => { undoRun(s, g); renderCourse(c, s); } });
         return;
       }
       openPetalModal(c, s, g, Date.now());
@@ -6415,7 +6644,7 @@
       }
 
       const p = order[r.pi || 0];
-      const list = (r.pending || s.petals[p].uids).slice();
+      const list = (r.pending || petalUids(s, p, g)).slice();
       const trip = returnAt - r.tripStart;
       const dec = {}, nt = {};
       const step = (i) => {
@@ -6506,8 +6735,8 @@
           r.state = 'idle';
           r.tripStart = null;
           r.pauseStart = now; // le groupe souffle ; touchez sa tuile quand il part sur le pétale suivant
-          r.pending = s.petals[order[r.pi]].uids.slice();
-          msg = `GR${g} : ${petalName(p)} ${refused.length ? 'terminé avec des balises perdues' : 'validé ✓'} — en pause, touchez la tuile pour ${petalLabel(s, order[r.pi])}.`;
+          r.pending = petalUids(s, order[r.pi], g).slice();
+          msg = `GR${g} : ${petalName(p)} ${refused.length ? 'terminé avec des balises perdues' : 'validé ✓'} — en pause, touchez la tuile pour ${petalLabel(s, order[r.pi], g)}.`;
         }
       }
       r.alerted = false;
