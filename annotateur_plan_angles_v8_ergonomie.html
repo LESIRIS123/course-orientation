@@ -335,7 +335,7 @@
       display: grid; place-items: center; pointer-events: none; border: 2px solid #fff;
     }
     .list-sheet {
-      position: fixed; z-index: 41; left: 0; right: 0; bottom: 0;
+      position: fixed; z-index: 49; left: 0; right: 0; bottom: 0; /* au-dessus du voile (.backdrop, 48), sinon les lignes ne reçoivent pas le clic */
       max-height: 82%; display: flex; flex-direction: column;
       background: var(--panel); border-radius: 20px 20px 0 0; box-shadow: var(--shadow);
       padding: 8px 0 var(--sb);
@@ -376,6 +376,22 @@
     .stepper { display: flex; align-items: center; gap: 4px; }
 
     /* ---------- Séances de course ---------- */
+    /* Viseur photo intégré (GPS + boussole au moment du déclenchement) */
+    .cam-screen { position: fixed; inset: 0; z-index: 46; background: #000; color: #fff; display: flex; flex-direction: column; }
+    .cam-screen[hidden] { display: none; }
+    .cam-screen video { flex: 1; min-height: 0; width: 100%; object-fit: contain; background: #000; }
+    .cam-top { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 8px; padding: calc(8px + var(--st)) calc(10px + var(--sr)) 8px calc(10px + var(--sl)); background: linear-gradient(rgba(0,0,0,.65), rgba(0,0,0,0)); }
+    .cam-top .cam-title { flex: 1; min-width: 0; font-weight: 600; font-size: 15px; }
+    .cam-top .btn { background: rgba(255,255,255,.16); color: #fff; }
+    .cam-info { position: absolute; left: 50%; transform: translateX(-50%); top: calc(60px + var(--st)); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: calc(100% - 20px); }
+    .cam-chip { padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,.55); font-size: 14px; font-variant-numeric: tabular-nums; }
+    .cam-chip.ok { background: rgba(22,163,74,.75); }
+    .cam-chip.warn { background: rgba(217,119,6,.8); }
+    .cam-bottom { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 16px calc(18px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(rgba(0,0,0,0), rgba(0,0,0,.7)); }
+    .cam-hint { font-size: 13px; text-align: center; opacity: .9; max-width: 420px; }
+    .cam-shutter { width: 76px; height: 76px; border-radius: 50%; border: 5px solid #fff; background: rgba(255,255,255,.25); padding: 0; cursor: pointer; }
+    .cam-shutter:active { background: #fff; }
+    .cam-shutter:disabled { opacity: .4; cursor: default; }
     .session-screen { position: fixed; inset: 0; z-index: 44; background: var(--bg); display: flex; flex-direction: column; }
     .ss-top {
       display: flex; align-items: center; gap: 8px; flex: none;
@@ -883,7 +899,8 @@
       <div class="float dock-gps" id="dockGps">
         <button class="btn" id="gpsWhereBtn" aria-pressed="false" title="Où suis-je ? (position en direct)"><svg class="i"><use href="#i-target"/></svg><span class="lbl">Où suis-je</span></button>
         <button class="btn" id="gpsHereBtn" title="Nouveau poste ici (GPS + boussole)"><svg class="i"><use href="#i-pin"/></svg><span class="lbl">Poste ici</span></button>
-        <button class="btn" id="gpsPhotosBtn" title="Nouveaux postes depuis des photos"><svg class="i"><use href="#i-camera"/></svg><span class="lbl">Photos</span></button>
+        <button class="btn" id="gpsShootBtn" title="Nouveau poste : photo prise dans l’appli (GPS + boussole)"><svg class="i"><use href="#i-camera"/></svg><span class="lbl">Photo ici</span></button>
+        <button class="btn" id="gpsPhotosBtn" title="Nouveaux postes depuis des photos de la galerie"><svg class="i"><use href="#i-file"/></svg><span class="lbl">Galerie</span></button>
       </div>
 
       <!-- Poste sélectionné -->
@@ -929,11 +946,13 @@
         </div>
         <div class="photo-box">
           <div class="field-lbl">Photo du point de vue</div>
-          <button class="btn photo-add" id="addPhotoBtn"><svg class="i"><use href="#i-camera"/></svg>Ajouter une photo</button>
+          <button class="btn photo-add" id="shootPhotoBtn"><svg class="i"><use href="#i-camera"/></svg>Prendre la photo (GPS + boussole)</button>
+          <button class="btn photo-add" id="addPhotoBtn"><svg class="i"><use href="#i-file"/></svg>Choisir dans la galerie</button>
           <div class="photo-full" id="photoFull" hidden>
             <button class="thumb" id="photoThumb" aria-label="Agrandir la photo"><img id="photoImg" alt="" /></button>
             <div class="photo-actions">
-              <button class="btn" id="replacePhotoBtn"><svg class="i"><use href="#i-camera"/></svg>Remplacer</button>
+              <button class="btn" id="reshootPhotoBtn"><svg class="i"><use href="#i-camera"/></svg>Reprendre</button>
+              <button class="btn" id="replacePhotoBtn"><svg class="i"><use href="#i-file"/></svg>Galerie</button>
               <button class="btn danger" id="removePhotoBtn"><svg class="i"><use href="#i-x"/></svg>Retirer</button>
             </div>
           </div>
@@ -952,7 +971,7 @@
   <!-- Menu -->
   <div class="backdrop" id="backdrop" hidden></div>
 <nav class="menu ux-menu" id="menu" hidden aria-label="Outils du projet">
-<div class="ux-menu-head"><div><span class="ux-eyebrow">ANGLES DE VUE</span><h2>Votre espace de travail</h2></div><button class="btn ghost icon" data-close-overlay aria-label="Fermer le menu"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div><div class="ux-tabs" role="tablist" aria-label="Rubriques du menu"><button class="btn" role="tab" id="ux-tab-projet" aria-controls="ux-pane-projet" aria-selected="true" tabindex="0" data-menu-tab="projet">Projet</button><button class="btn" role="tab" id="ux-tab-postes" aria-controls="ux-pane-postes" aria-selected="false" tabindex="-1" data-menu-tab="postes">Postes</button><button class="btn" role="tab" id="ux-tab-terrain" aria-controls="ux-pane-terrain" aria-selected="false" tabindex="-1" data-menu-tab="terrain">GPS</button><button class="btn" role="tab" id="ux-tab-reglages" aria-controls="ux-pane-reglages" aria-selected="false" tabindex="-1" data-menu-tab="reglages">Réglages</button><button class="btn" role="tab" id="ux-tab-aide" aria-controls="ux-pane-aide" aria-selected="false" tabindex="-1" data-menu-tab="aide">Aide</button></div><div class="ux-menu-body"><section class="ux-pane" id="ux-pane-projet" role="tabpanel" aria-labelledby="ux-tab-projet" ><h3>Mon projet</h3><p class="ux-intro">Retrouver son travail, choisir un plan et garder une copie.</p><button class="btn block mi" data-action="openProject"  ><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span><b>Ouvrir un projet</b><small>Reprendre un fichier enregistré (.json)</small></span></button><button class="btn block mi" data-action="saveProject" data-needs-plan ><svg class="i" aria-hidden="true"><use href="#i-save"/></svg><span><b>Enregistrer mon projet</b><small>Plan, postes, photos et séances dans un fichier .json</small></span></button><h3>Le fond de carte</h3><button class="btn block mi" data-action="openPlan"  ><svg class="i" aria-hidden="true"><use href="#i-file"/></svg><span><b>Charger un plan</b><small>À partir d’un PDF, d’une photo ou d’une image</small></span></button><button class="btn block mi" data-action="makePlan"  ><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg><span><b>Créer un plan en ligne</b><small>Choisir une zone sur une carte</small></span></button><button class="btn block mi" data-action="oomap"><svg class="i" aria-hidden="true"><use href="#i-pdf"/></svg><span><b>Carte de course d’orientation</b><small>La fabriquer avec OpenOrienteeringMap (site externe gratuit)</small></span></button><div class="ux-tip">Enregistrez régulièrement : le fichier .json est votre seule vraie sauvegarde (plan, postes, photos, séances). C’est aussi lui qui permet de passer du PC à l’iPhone.</div><details class="ux-details"><summary>Recommencer un projet</summary><button class="btn block mi" data-action="newProject" data-needs-plan ><svg class="i" aria-hidden="true"><use href="#i-new"/></svg><span><b>Nouveau projet</b><small>Fermer le projet en cours après confirmation</small></span></button></details></section><section class="ux-pane" id="ux-pane-postes" role="tabpanel" aria-labelledby="ux-tab-postes" hidden><h3>Préparer les postes <span id="markerCount"></span></h3><p class="ux-intro">Placez le départ, ajoutez vos postes, puis vérifiez les photos.</p><button class="btn block mi" data-action="placeStart" data-needs-plan ><svg class="i" aria-hidden="true"><use href="#i-start"/></svg><span><b>1. Placer le départ / arrivée</b><small>Le point de référence de vos parcours</small></span></button><button class="btn block mi" data-action="manualPlace" data-needs-plan ><svg class="i" aria-hidden="true"><use href="#i-pin"/></svg><span><b>2. Ajouter des postes sur le plan</b><small>Touchez le plan, puis choisissez la direction du regard</small></span></button><button class="btn block mi" data-action="listPosts" data-needs-plan ><svg class="i" aria-hidden="true"><use href="#i-list"/></svg><span><b>3. Vérifier les postes et les photos</b><small>Liste complète, doublons et photos manquantes</small></span></button><h3>Passer à la séance</h3><button class="btn block mi" data-action="sessions" data-needs-plan ><svg class="i" aria-hidden="true"><use href="#i-timer"/></svg><span><b>Préparer et suivre une séance</b><small>Groupes, cartes, chronos et résultats</small></span></button><details class="ux-details"><summary>Effacer les postes</summary><button class="btn block danger-text" data-action="clearMarkers" data-needs-plan><svg class="i" aria-hidden="true"><use href="#i-eraser"/></svg>Effacer tous les postes</button></details></section><section class="ux-pane" id="ux-pane-terrain" role="tabpanel" aria-labelledby="ux-tab-terrain" hidden><h3>Sur le terrain</h3><p class="ux-intro">Reliez d’abord le plan au GPS pour utiliser les outils de terrain.</p><button class="btn block mi" data-action="geoCalib" data-needs-plan ><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg><span><b>1. Caler le plan avec le GPS</b><small><span id="geoCalibState">À faire une fois, avant le terrain</span></small></span></button><h3>2. Utiliser le plan sur place</h3><button class="btn block mi" data-action="geoWhere" data-needs-plan data-needs-geo><svg class="i" aria-hidden="true"><use href="#i-target"/></svg><span><b>Voir ma position</b><small>Afficher ma position GPS sur le plan</small></span></button><button class="btn block mi" data-action="geoHere" data-needs-plan data-needs-geo><svg class="i" aria-hidden="true"><use href="#i-pin"/></svg><span><b>Ajouter un poste ici</b><small>Utiliser le GPS et la boussole</small></span></button><button class="btn block mi" data-action="geoPhotos" data-needs-plan data-needs-geo><svg class="i" aria-hidden="true"><use href="#i-camera"/></svg><span><b>Créer des postes depuis des photos</b><small>Importer les photos prises sur le terrain</small></span></button><div class="ux-tip">Une fois le plan calé, ces outils sont aussi accessibles directement sur la carte.</div></section><section class="ux-pane" id="ux-pane-reglages" role="tabpanel" aria-labelledby="ux-tab-reglages" hidden><h3>Réglages du plan</h3><p class="ux-intro">Personnalisez les symboles, la numérotation et les fichiers.</p>    <div class="setting">
+<div class="ux-menu-head"><div><span class="ux-eyebrow">ANGLES DE VUE</span><h2>Votre espace de travail</h2></div><button class="btn ghost icon" data-close-overlay aria-label="Fermer le menu"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div><div class="ux-tabs" role="tablist" aria-label="Rubriques du menu"><button class="btn" role="tab" id="ux-tab-projet" aria-controls="ux-pane-projet" aria-selected="true" tabindex="0" data-menu-tab="projet">Projet</button><button class="btn" role="tab" id="ux-tab-postes" aria-controls="ux-pane-postes" aria-selected="false" tabindex="-1" data-menu-tab="postes">Postes</button><button class="btn" role="tab" id="ux-tab-terrain" aria-controls="ux-pane-terrain" aria-selected="false" tabindex="-1" data-menu-tab="terrain">GPS</button><button class="btn" role="tab" id="ux-tab-reglages" aria-controls="ux-pane-reglages" aria-selected="false" tabindex="-1" data-menu-tab="reglages">Réglages</button><button class="btn" role="tab" id="ux-tab-aide" aria-controls="ux-pane-aide" aria-selected="false" tabindex="-1" data-menu-tab="aide">Aide</button></div><div class="ux-menu-body"><section class="ux-pane" id="ux-pane-projet" role="tabpanel" aria-labelledby="ux-tab-projet" ><h3>Mon projet</h3><p class="ux-intro">Retrouver son travail, choisir un plan et garder une copie.</p><button class="btn block mi" data-action="openProject"  ><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span><b>Ouvrir un projet</b><small>Reprendre un fichier enregistré (.json)</small></span></button><button class="btn block mi" data-action="saveProject" data-needs-plan ><svg class="i" aria-hidden="true"><use href="#i-save"/></svg><span><b>Enregistrer mon projet</b><small>Plan, postes, photos et séances dans un fichier .json</small></span></button><h3>Le fond de carte</h3><button class="btn block mi" data-action="openPlan"  ><svg class="i" aria-hidden="true"><use href="#i-file"/></svg><span><b>Charger un plan</b><small>À partir d’un PDF, d’une photo ou d’une image</small></span></button><button class="btn block mi" data-action="makePlan"  ><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg><span><b>Créer un plan en ligne</b><small>Choisir une zone sur une carte</small></span></button><button class="btn block mi" data-action="oomap"><svg class="i" aria-hidden="true"><use href="#i-pdf"/></svg><span><b>Carte de course d’orientation</b><small>La fabriquer avec OpenOrienteeringMap (site externe gratuit)</small></span></button><div class="ux-tip">Enregistrez régulièrement : le fichier .json est votre seule vraie sauvegarde (plan, postes, photos, séances). C’est aussi lui qui permet de passer du PC à l’iPhone.</div><details class="ux-details"><summary>Recommencer un projet</summary><button class="btn block mi" data-action="newProject" data-needs-plan ><svg class="i" aria-hidden="true"><use href="#i-new"/></svg><span><b>Nouveau projet</b><small>Fermer le projet en cours après confirmation</small></span></button></details></section><section class="ux-pane" id="ux-pane-postes" role="tabpanel" aria-labelledby="ux-tab-postes" hidden><h3>Préparer les postes <span id="markerCount"></span></h3><p class="ux-intro">Placez le départ, ajoutez vos postes, puis vérifiez les photos.</p><button class="btn block mi" data-action="placeStart" data-needs-plan ><svg class="i" aria-hidden="true"><use href="#i-start"/></svg><span><b>1. Placer le départ / arrivée</b><small>Le point de référence de vos parcours</small></span></button><button class="btn block mi" data-action="manualPlace" data-needs-plan ><svg class="i" aria-hidden="true"><use href="#i-pin"/></svg><span><b>2. Ajouter des postes sur le plan</b><small>Touchez le plan, puis choisissez la direction du regard</small></span></button><button class="btn block mi" data-action="listPosts" data-needs-plan ><svg class="i" aria-hidden="true"><use href="#i-list"/></svg><span><b>3. Vérifier les postes et les photos</b><small>Liste complète, doublons et photos manquantes</small></span></button><h3>Passer à la séance</h3><button class="btn block mi" data-action="sessions" data-needs-plan ><svg class="i" aria-hidden="true"><use href="#i-timer"/></svg><span><b>Préparer et suivre une séance</b><small>Groupes, cartes, chronos et résultats</small></span></button><details class="ux-details"><summary>Effacer les postes</summary><button class="btn block danger-text" data-action="clearMarkers" data-needs-plan><svg class="i" aria-hidden="true"><use href="#i-eraser"/></svg>Effacer tous les postes</button></details></section><section class="ux-pane" id="ux-pane-terrain" role="tabpanel" aria-labelledby="ux-tab-terrain" hidden><h3>Sur le terrain</h3><p class="ux-intro">Reliez d’abord le plan au GPS pour utiliser les outils de terrain.</p><button class="btn block mi" data-action="geoCalib" data-needs-plan ><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg><span><b>1. Caler le plan avec le GPS</b><small><span id="geoCalibState">À faire une fois, avant le terrain</span></small></span></button><h3>2. Utiliser le plan sur place</h3><button class="btn block mi" data-action="geoWhere" data-needs-plan data-needs-geo><svg class="i" aria-hidden="true"><use href="#i-target"/></svg><span><b>Voir ma position</b><small>Afficher ma position GPS sur le plan</small></span></button><button class="btn block mi" data-action="geoHere" data-needs-plan data-needs-geo><svg class="i" aria-hidden="true"><use href="#i-pin"/></svg><span><b>Ajouter un poste ici</b><small>Utiliser le GPS et la boussole</small></span></button><button class="btn block mi" data-action="geoShoot" data-needs-plan data-needs-geo><svg class="i" aria-hidden="true"><use href="#i-camera"/></svg><span><b>Prendre une photo ici</b><small>Crée le poste : photo, position GPS et direction de la boussole</small></span></button><button class="btn block mi" data-action="geoPhotos" data-needs-plan data-needs-geo><svg class="i" aria-hidden="true"><use href="#i-camera"/></svg><span><b>Créer des postes depuis des photos</b><small>Importer les photos prises sur le terrain</small></span></button><div class="ux-tip">Une fois le plan calé, ces outils sont aussi accessibles directement sur la carte.</div></section><section class="ux-pane" id="ux-pane-reglages" role="tabpanel" aria-labelledby="ux-tab-reglages" hidden><h3>Réglages du plan</h3><p class="ux-intro">Personnalisez les symboles, la numérotation et les fichiers.</p>    <div class="setting">
       <div class="setting-row">
         <span>Symbole d’angle de vue
           <button class="info-btn" data-info="infoSym" title="À quoi ça sert ?" aria-label="Explication : symbole d’angle de vue">i</button></span>
@@ -1157,7 +1176,7 @@
     </ul>
     <h4 id="h-photos">Photos des points de vue</h4>
     <ul>
-      <li>Dans le panneau d’un poste : <strong>Ajouter une photo</strong>, puis appareil photo ou galerie. Ensuite <strong>Remplacer</strong> ou <strong>Retirer</strong>. Touchez la vignette pour l’agrandir.</li>
+      <li>Dans le panneau d’un poste : <strong>Prendre la photo</strong> ouvre l’appareil photo dans l’application et enregistre en même temps la position GPS et la direction de la boussole (application ouverte en https). <strong>Choisir dans la galerie</strong> reprend une photo existante. Ensuite <strong>Remplacer</strong> ou <strong>Retirer</strong>. Touchez la vignette pour l’agrandir.</li>
       <li>Les postes qui ont une photo portent un petit badge bleu <strong>📷</strong> sur le plan.</li>
       <li>Les photos sont réduites automatiquement (1600 px) pour garder des fichiers raisonnables.</li>
       <li>Elles ne sont jamais visibles par les élèves depuis l’application : elles servent au prof pour valider, aux corrigés papier et à la carte interactive.</li>
@@ -1255,6 +1274,18 @@
 
   <input id="planInput" type="file" accept="application/pdf,.pdf,image/*,.jgw,.jpgw,.jpw,.pgw,.pngw,.wld,text/plain" multiple hidden />
   <input id="projectInput" type="file" accept=".json,application/json,text/plain" hidden />
+  <section class="cam-screen" id="camScreen" hidden aria-label="Prendre une photo">
+    <video id="camVideo" playsinline muted autoplay></video>
+    <div class="cam-top">
+      <span class="cam-title" id="camTitle">Photo du poste</span>
+      <button class="btn icon" id="camCloseBtn" aria-label="Fermer l’appareil photo"><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="cam-info"><span class="cam-chip" id="camGps">GPS…</span><span class="cam-chip" id="camDir">Boussole…</span></div>
+    <div class="cam-bottom">
+      <div class="cam-hint" id="camHint">Tenez l’appareil droit, objectif vers la scène, et restez immobile quelques secondes.</div>
+      <button class="cam-shutter" id="camShutter" aria-label="Prendre la photo"></button>
+    </div>
+  </section>
   <input id="photoInput" type="file" accept="image/*" hidden />
   <input id="geoPhotosInput" type="file" accept="image/*" multiple hidden />
 
@@ -1263,7 +1294,7 @@
     'use strict';
 
     const $ = (id) => document.getElementById(id);
-    const APP_VERSION = '2026-10-03-1'; // version test ← à incrémenter à chaque nouvelle mise en ligne
+    const APP_VERSION = '2026-11-18-1'; // version test ← à incrémenter à chaque nouvelle mise en ligne
     const SVGNS = 'http://www.w3.org/2000/svg';
     const MAX_PIXELS = 16000000; // limite de taille des canvas sur iOS
     const TAP_SLOP = 8;          // déplacement (px) en dessous duquel un toucher reste un « tap »
@@ -1899,6 +1930,7 @@
       $('selReserved').checked = !!m.reserved;
       const photo = m.photoId && state.photos[m.photoId];
       $('addPhotoBtn').hidden = !!photo;
+      $('shootPhotoBtn').hidden = !!photo;
       $('photoFull').hidden = !photo;
       if (photo && $('photoImg').getAttribute('src') !== photo) $('photoImg').src = photo;
       refreshGpsInfo(m);
@@ -3962,6 +3994,131 @@
       } finally { geoBusy = false; }
     }
 
+    // ---------- Photo prise dans l'appli : viseur, GPS et boussole au déclenchement ----------
+    // Les navigateurs retirent la position des photos prises via le sélecteur de fichiers :
+    // on filme donc dans la page et on mesure nous-mêmes GPS et direction.
+    const cam = { stream: null, watch: null, gps: [], mode: null, targetId: null, timer: null, busy: false, useGps: false };
+    const camScreen = $('camScreen'), camVideo = $('camVideo'), camShutter = $('camShutter');
+    function camGpsFix(windowS) {
+      const now = Date.now();
+      let list = cam.gps.filter((c) => c.t > now - windowS * 1000);
+      if (!list.length && cam.gps.length) list = [cam.gps[cam.gps.length - 1]];
+      if (!list.length) return null;
+      let W = 0, la = 0, lo = 0;
+      for (const c of list) { const w = 1 / Math.max(1, c.acc) ** 2; W += w; la += w * c.lat; lo += w * c.lon; }
+      const accs = list.map((c) => c.acc).sort((a, b) => a - b);
+      return { lat: la / W, lon: lo / W, acc: Math.round(accs[Math.floor(accs.length / 2)] * 10) / 10 };
+    }
+    function camHeading() {
+      if (!compass.samples) return null;
+      const recent = compass.samples.filter((s) => s.t > Date.now() - 1500);
+      const up = recent.filter((s) => s.upright);
+      const h = meanHeading(up.length ? up : recent);
+      return h ? { h: normalizeAngle(h.h + geoDecl()), upright: up.length > 0, spread: h.spread } : null;
+    }
+    function camStatus() {
+      if (compass.samples) compass.samples = compass.samples.filter((s) => s.t > Date.now() - 10000);
+      const g = cam.useGps ? camGpsFix(8) : null, h = camHeading();
+      const gEl = $('camGps'), dEl = $('camDir');
+      if (!cam.useGps) { gEl.textContent = 'GPS : carte non calée'; gEl.className = 'cam-chip'; }
+      else if (!g) { gEl.textContent = 'GPS : recherche…'; gEl.className = 'cam-chip warn'; }
+      else { gEl.textContent = `GPS ± ${fmt1(g.acc)} m`; gEl.className = 'cam-chip ' + (g.acc <= 10 ? 'ok' : 'warn'); }
+      if (!h) { dEl.textContent = 'Boussole : —'; dEl.className = 'cam-chip warn'; }
+      else { dEl.textContent = `Cap ${Math.round(h.h)}°` + (h.upright ? '' : ' · tenez droit'); dEl.className = 'cam-chip ' + (h.upright ? 'ok' : 'warn'); }
+      // Nouveau poste : impossible sans position.
+      camShutter.disabled = cam.busy || (cam.mode === 'new' && !g);
+      $('camHint').textContent = cam.mode === 'new' && !g ? 'Attente de la position GPS… Restez à découvert.' : 'Tenez l’appareil droit, objectif vers la scène, et restez immobile quelques secondes.';
+    }
+    async function openCamera(mode, targetId) {
+      if (cam.stream || geoBusy) return;
+      if (mode === 'new' && !needGeo()) return;
+      if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        if (mode === 'marker') { toast('Appareil photo intégré indisponible (l’application doit être ouverte en https) : choisissez une photo.'); pickPhoto(); }
+        else toast('Appareil photo intégré indisponible : l’application doit être ouverte en https.');
+        return;
+      }
+      cam.mode = mode; cam.targetId = targetId || null; cam.gps = []; cam.busy = false;
+      cam.useGps = !!GT && !!navigator.geolocation;
+      // La boussole d'abord : sur iPhone, l'autorisation doit être demandée pendant le geste.
+      const compassP = startCompass();
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1920 } } });
+      } catch (e) {
+        toast(e && e.name === 'NotAllowedError' ? 'Accès à l’appareil photo refusé : autorisez-le pour ce site.' : 'Impossible d’ouvrir l’appareil photo.');
+        return;
+      }
+      cam.stream = stream;
+      await compassP;
+      compass.samples = [];
+      if (cam.useGps) {
+        cam.watch = navigator.geolocation.watchPosition((pos) => {
+          cam.gps.push({ lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy, t: Date.now() });
+          if (cam.gps.length > 60) cam.gps.shift();
+        }, (err) => { if (err.code === 1) toast('Accès à la position refusé : la photo sera prise sans GPS.'); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+      }
+      const m = mode === 'marker' ? markerById(cam.targetId) : null;
+      $('camTitle').textContent = m ? `Photo du poste n°${m.number}` : 'Nouveau poste avec photo';
+      camVideo.srcObject = stream;
+      camScreen.hidden = false;
+      try { await camVideo.play(); } catch (_) { /* autoplay muet : normalement accepté */ }
+      camStatus();
+      cam.timer = setInterval(camStatus, 400);
+    }
+    function closeCamera() {
+      clearInterval(cam.timer); cam.timer = null;
+      if (cam.watch !== null) navigator.geolocation.clearWatch(cam.watch);
+      cam.watch = null;
+      if (cam.stream) cam.stream.getTracks().forEach((t) => t.stop());
+      cam.stream = null;
+      camVideo.srcObject = null;
+      compass.samples = null;
+      camScreen.hidden = true;
+    }
+    function camShoot() {
+      if (!cam.stream || cam.busy) return;
+      const w = camVideo.videoWidth, h = camVideo.videoHeight;
+      if (!w || !h) { toast('L’image n’est pas encore prête, réessayez.'); return; }
+      cam.busy = true;
+      // Mesures figées à l'instant du déclenchement.
+      const fix = cam.useGps ? camGpsFix(8) : null, head = camHeading();
+      const f = Math.min(1, 1600 / Math.max(w, h));
+      const c = document.createElement('canvas');
+      c.width = Math.round(w * f); c.height = Math.round(h * f);
+      c.getContext('2d').drawImage(camVideo, 0, 0, c.width, c.height);
+      const dataUrl = c.toDataURL('image/jpeg', 0.82);
+      const mode = cam.mode, targetId = cam.targetId;
+      closeCamera();
+      const g = fix ? { ...fix, dir: head ? Math.round(head.h) : null, src: 'direct' } : null;
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      if (mode === 'new') {
+        if (!g || !inPlan(geoToPx(g.lat, g.lon))) { toast(g ? `Vous êtes hors du plan (± ${fmt1(g.acc)} m) : photo non enregistrée.` : 'Pas de position GPS : photo non enregistrée.'); return; }
+        state.photos[id] = dataUrl; savePhoto(id);
+        const m = gpsMarker(g);
+        m.photoId = id;
+        renderMarkers(); select(m.id); commit();
+        requestAnimationFrame(() => ensureVisible(m, true));
+        toast(`Poste n°${m.number} créé avec photo (± ${fmt1(g.acc)} m)` + (g.dir != null ? `, cap ${g.dir}°` : ' · pas de boussole : orientez-le à la main') + '.', { label: 'Annuler', fn: undo });
+        return;
+      }
+      const m = markerById(targetId);
+      if (!m) return;
+      state.photos[id] = dataUrl; savePhoto(id);
+      m.photoId = id;
+      renderMarkers(); refreshPanel(); commit();
+      if (g && GT && inPlan(geoToPx(g.lat, g.lon))) {
+        const p = geoToPx(g.lat, g.lon);
+        const d = Math.hypot(p.x - m.x, p.y - m.y) / GT.s;
+        toast(`Photo ajoutée. Position mesurée à ${fmt1(d)} m du poste (± ${fmt1(g.acc)} m)` + (g.dir != null ? `, cap ${g.dir}°` : '') + '.', { label: g.dir != null ? 'Placer et orienter' : 'Placer au GPS', fn: () => applyGps(m, g), sticky: true });
+      } else if (head && GT) {
+        const dir = Math.round(head.h);
+        toast(`Photo ajoutée au poste n°${m.number} (cap ${dir}°).`, { label: 'Orienter le poste', fn: () => { m.angle = geoAngle(dir); renderMarkers(); refreshPanel(); commit(); }, sticky: true });
+      } else toast(`Photo ajoutée au poste n°${m.number}.`);
+    }
+    camShutter.addEventListener('click', camShoot);
+    $('camCloseBtn').addEventListener('click', closeCamera);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && cam.stream) closeCamera(); });
+
     // ---------- « Où suis-je ? » : position en direct sur le plan ----------
     const geoLive = { watch: null, pos: null };
     function geoWhere() {
@@ -4028,6 +4185,9 @@
     $('gpsWhereBtn').addEventListener('click', geoWhere);
     $('gpsHereBtn').addEventListener('click', geoHere);
     $('gpsPhotosBtn').addEventListener('click', geoPickPhotos);
+    $('gpsShootBtn').addEventListener('click', () => openCamera('new'));
+    $('shootPhotoBtn').addEventListener('click', () => { const m = selectedMarker(); if (m) openCamera('marker', m.id); });
+    $('reshootPhotoBtn').addEventListener('click', () => { const m = selectedMarker(); if (m) openCamera('marker', m.id); });
 
     // ---------- Écran de calage : la carte et la photo aérienne côte à côte ----------
     const geoScreen = $('geoScreen'), geoView = $('geoView'), geoStage = $('geoStage'), geoImg = $('geoImg'), geoOv = $('geoOv');
@@ -4510,6 +4670,7 @@
       manualPlace: () => { setAddMode(true); toast('Touchez le plan pour poser un poste, puis orientez-le avec la rosace.'); },
       geoCalib: openGeo,
       geoPhotos: geoPickPhotos,
+      geoShoot: () => openCamera('new'),
       geoHere,
       geoWhere,
       sessions: openSessions,
