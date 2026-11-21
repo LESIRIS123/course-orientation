@@ -1295,7 +1295,7 @@
     'use strict';
 
     const $ = (id) => document.getElementById(id);
-    const APP_VERSION = '2026-11-21-2'; // version test ← à incrémenter à chaque nouvelle mise en ligne
+    const APP_VERSION = '2026-11-21-3'; // version test ← à incrémenter à chaque nouvelle mise en ligne
     const SVGNS = 'http://www.w3.org/2000/svg';
     const MAX_PIXELS = 16000000; // limite de taille des canvas sur iOS
     const TAP_SLOP = 8;          // déplacement (px) en dessous duquel un toucher reste un « tap »
@@ -4023,6 +4023,8 @@
       try { attendu = new URL(genUrl()).origin; } catch (_) { return; }
       if (e.origin !== attendu || !(d.png instanceof ArrayBuffer) || !(d.pgw instanceof ArrayBuffer)) return;
       const nom = String(d.nom || 'carte').replace(/[^\w\- ]+/g, '_').slice(0, 60) || 'carte';
+      // Accusé de réception : le générateur sait ainsi que la carte est bien arrivée.
+      try { e.source && e.source.postMessage({ type: 'carte-co-recue', nom }, e.origin); } catch (_) { /* onglet fermé */ }
       try { window.focus(); } catch (_) { /* rien */ }
       if (state.markers.length && !confirm(`La carte « ${nom} » est prête. La charger remplacera le plan actuel et effacera ses postes.\nPensez à enregistrer le projet si besoin. Continuer ?`)) {
         toast('Carte non chargée : elle reste téléchargeable depuis la page du générateur.');
