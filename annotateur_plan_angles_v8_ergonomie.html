@@ -1306,7 +1306,7 @@
     'use strict';
 
     const $ = (id) => document.getElementById(id);
-    const APP_VERSION = '2026-11-22-3'; // version test ← à incrémenter à chaque nouvelle mise en ligne
+    const APP_VERSION = '2026-11-22-4'; // version test ← à incrémenter à chaque nouvelle mise en ligne
     const SVGNS = 'http://www.w3.org/2000/svg';
     const MAX_PIXELS = 16000000; // limite de taille des canvas sur iOS
     const TAP_SLOP = 8;          // déplacement (px) en dessous duquel un toucher reste un « tap »
@@ -5160,14 +5160,24 @@
     function saveClasses() { clearTimeout(classesTimer); classesTimer = setTimeout(saveClassesNow, 250); }
 
     // ---------- Ouverture / fermeture ----------
+    // Classe et séance affichées par défaut : les dernières de la liste.
+    function selectDefaultSession() {
+      if (!curClass() && state.classes.length) ssUI.classId = state.classes[state.classes.length - 1].id;
+      const c = curClass();
+      if (c && !curSession() && c.sessions.length) ssUI.sessionId = c.sessions[c.sessions.length - 1].id;
+    }
+    // Une course ou une évaluation est en cours : les chronos et alertes doivent tourner, même hors de l'écran Séances.
+    function courseEnCours() {
+      const c = curClass(), s = curSession();
+      return !!((s && s.status === 'running') || (c && c.eval && c.eval.status === 'running'));
+    }
     function openSessions() {
       if (!state.bg) { toast('Chargez d’abord un plan.'); return; }
       closeOverlays();
       deselect();
       ensureUids();
-      if (!curClass() && state.classes.length) ssUI.classId = state.classes[state.classes.length - 1].id;
+      selectDefaultSession();
       const c = curClass();
-      if (c && !curSession() && c.sessions.length) ssUI.sessionId = c.sessions[c.sessions.length - 1].id;
       const s = curSession();
       ssUI.tab = c && c.eval && c.eval.status === 'running' ? 'eval' : s && s.status === 'running' ? 'course' : 'prep';
       sessionScreen.hidden = false;
@@ -5177,7 +5187,7 @@
     function closeSessions() {
       closeGroupModal();
       sessionScreen.hidden = true;
-      stopTicker();
+      if (!courseEnCours()) stopTicker(); // sinon les alertes « pas revenu » / « temps écoulé » continuent
       releaseWake();
     }
     $('ssBack').addEventListener('click', closeSessions);
@@ -5361,7 +5371,7 @@
           <div data-only="papillon"><label for="nsPSize">Balises par pétale (modifiable ensuite)</label>${stepper('nsPSize', last && last.pSize ? last.pSize : 2, 1, 8)}</div>
         </div>
         <div class="setting-row" style="padding:0" data-only="papillon">
-          <label for="nsPerGroup">Balises différentes selon les groupes<br><span class="ss-note">comme la séance 4 du document (parcours A et B) : chaque pétale a une réserve de balises, chaque groupe en reçoit quelques-unes (« balises par pétale ») dans son propre ordre ; tous les groupes font P1 puis P2…</span></label>
+          <label for="nsPerGroup">Balises différentes selon les groupes<br><span class="ss-note">par exemple deux parcours A et B : chaque pétale a une réserve de balises, chaque groupe en reçoit quelques-unes (« balises par pétale ») dans son propre ordre ; tous les groupes font P1 puis P2…</span></label>
           <span class="switch"><input type="checkbox" id="nsPerGroup" ${last && last.perGroup ? 'checked' : ''}><span></span></span>
         </div>
         <div class="setting-row" style="padding:0">
@@ -5732,8 +5742,8 @@
       $('meClear').addEventListener('click', () => { prepPush(s); s.cards[g] = []; updateSessionDist(s); saveClasses(); renderManualEditor(c, s); });
       const meAll = $('meAll');
       if (meAll) meAll.addEventListener('click', () => {
-        prepPush(s);
         if (!confirm(`Donner les ${card.size} balises de GR${g} à tous les groupes (leurs choix actuels seront remplacés) ?`)) return;
+        prepPush(s);
         for (let k = 1; k <= s.groups; k++) s.cards[k] = (s.cards[g] || []).slice();
         s.manual = true;
         updateSessionDist(s);
@@ -5799,7 +5809,7 @@
             : `<p>Distribuez les cartes, puis démarrez la séance : chaque groupe part quand vous touchez sa tuile.</p>
                <div class="ss-actions"><button class="btn primary" id="spStart"><svg class="i"><use href="#i-timer"/></svg>Démarrer la séance</button>
                <button class="btn" id="spDoneNoRes"><svg class="i"><use href="#i-check"/></svg>Déjà faite (sans résultats)</button>
-               <button class="btn danger" id="spDelete"><svg class="i"><use href="#i-trash"/></svg>Supprimer ce tirage</button></div>`}
+               <button class="btn danger" id="spDelete"><svg class="i"><use href="#i-trash"/></svg>Supprimer cette séance</button></div>`}
         </div>`;
       ssBody.querySelectorAll('[data-spdf]').forEach((b) => b.addEventListener('click', () => exportSessionPdf(c, s, b.dataset.spdf)));
       const on = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', fn); };
@@ -5850,7 +5860,7 @@
         renderSessions();
       });
       on('spDelete', () => {
-        if (!confirm(`Supprimer le tirage de la séance ${s.num} ?`)) return;
+        if (!confirm(`Supprimer la séance ${s.num} ?`)) return;
         c.sessions = c.sessions.filter((x) => x !== s);
         ssUI.sessionId = null;
         saveClasses();
@@ -6341,12 +6351,12 @@
     function tick() {
       evalTick();
       const c = curClass(), s = curSession();
-      if (!s || s.status !== 'running' || sessionScreen.hidden) return;
+      if (!s || s.status !== 'running') return;
       const now = Date.now();
       for (let g = 1; g <= s.groups; g++) {
         const r = runOf(s, g);
         if (r.state === 'idle' && r.pauseStart != null) {
-          if (ssUI.tab !== 'course') continue;
+          if (ssUI.tab !== 'course' || sessionScreen.hidden) continue;
           const live = ssBody.querySelector(`[data-live="${g}"]`);
           if (live) live.textContent = fmtTime(now - r.pauseStart);
           continue;
@@ -6358,7 +6368,7 @@
           saveClasses();
           alarm(`⚠ GR${g} n’est pas revenu depuis ${s.alertMin} min !`);
         }
-        if (ssUI.tab !== 'course') continue;
+        if (ssUI.tab !== 'course' || sessionScreen.hidden) continue;
         const live = ssBody.querySelector(`[data-live="${g}"]`);
         if (live) live.textContent = fmtTime(now - r.tripStart);
         const tile = ssBody.querySelector(`.gtile[data-g="${g}"]`);
@@ -6395,7 +6405,8 @@
         }
       } catch (_) {}
       try { navigator.vibrate && navigator.vibrate([300, 150, 300, 150, 300]); } catch (_) {}
-      toast(message);
+      // Hors de l'écran Séances : un bouton y ramène directement
+      toast(message, sessionScreen.hidden ? { label: 'Voir', fn: openSessions } : undefined);
     }
 
     // Garde l'écran allumé pendant la course (si le navigateur le permet).
@@ -6496,13 +6507,14 @@
           const cells = done.map((s) => {
             const r = ranks.get(s.id).get(g);
             if (!r) return '<td class="n">—</td>';
-            const perBal = r.ok ? fmtTime(r.t / r.ok) : '—';
-            return `<td class="n"><span class="rank r${r.rank}" style="width:24px;height:24px;font-size:12px">${r.rank}</span><br>${r.ok}/${r.n} · ${r.err}✗<br><span class="ss-note">${perBal}/bal.</span></td>`;
+            // Même mesure que le classement de la séance : par pétale complet en papillon, par balise validée en étoile
+            const moy = isPap(s) ? `${r.pc ? fmtTime(r.t / r.pc) : '—'}/pét.` : `${r.ok ? fmtTime(r.t / r.ok) : '—'}/bal.`;
+            return `<td class="n"><span class="rank r${r.rank}" style="width:24px;height:24px;font-size:12px">${r.rank}</span><br>${r.ok}/${r.n} · ${r.err}✗<br><span class="ss-note">${moy}</span></td>`;
           });
           rows.push(`<tr><td><strong>GR${g}</strong></td>${cells.join('')}</tr>`);
         }
         body = `<div class="table-wrap"><table class="res"><thead><tr><th>Groupe</th>${head}</tr></thead><tbody>${rows.join('')}</tbody></table></div>
-          <p class="ss-note">Dans chaque case : rang, balises validées, erreurs, et temps moyen par balise validée (un temps qui baisse = un groupe qui progresse).</p>`;
+          <p class="ss-note">Dans chaque case : rang, balises validées, erreurs, et temps moyen par balise validée (« /bal. », séances en étoile) ou par pétale complet (« /pét. », séances papillon). Un temps qui baisse = un groupe qui progresse ; comparez des séances de même format.</p>`;
       }
       return `<div class="ss-card"><h3>Progression de la classe ${escapeHtml(c.name)}
           <button class="btn" id="rsCsv"><svg class="i"><use href="#i-download"/></svg>Exporter (tableur CSV)</button></h3>${body}</div>`;
@@ -6846,7 +6858,7 @@
           grows.push(`<tr><td><strong>GR${g}</strong></td>${cells}</tr>`);
         }
         gcard = `<div class="ss-card"><h3>Balises de chaque groupe <span class="ss-note">dans l’ordre du parcours</span></h3>
-          ${locked ? '' : `<p class="ss-note">Touchez « Répartir » pour donner à chaque groupe des balises de la réserve de chaque pétale (chaque groupe commence par une balise différente), ou tapez directement les numéros, séparés par des espaces ou des points-virgules (ex. <strong>71 ; 68 ; 66</strong>), comme dans le document de séance. Le pourcentage compare la longueur de la boucle à celle des autres groupes.</p>
+          ${locked ? '' : `<p class="ss-note">Touchez « Répartir » pour donner à chaque groupe des balises de la réserve de chaque pétale (chaque groupe commence par une balise différente), ou tapez directement les numéros, séparés par des espaces ou des points-virgules (ex. <strong>71 ; 68 ; 66</strong>). Le pourcentage compare la longueur de la boucle à celle des autres groupes.</p>
           <div class="ss-fields"><div><label for="ppK">Balises par groupe dans chaque pétale</label>${stepper('ppK', groupPetalsK(s), 1, 12)}</div></div>
           <div class="ss-actions"><button class="btn primary" id="ppSpread"><svg class="i"><use href="#i-new"/></svg>Répartir la réserve entre les groupes</button></div>`}
           <div class="table-wrap" style="margin-top:8px"><table class="res"><thead><tr><th>Groupe</th>${head}</tr></thead><tbody>${grows.join('')}</tbody></table></div>
@@ -6919,8 +6931,8 @@
       ssBody.querySelectorAll('[data-pp]').forEach((b) => b.addEventListener('click', () => { ssUI.petal = Number(b.dataset.pp); renderPapillonPrep(c, s); }));
       ssBody.querySelectorAll('[data-pdel]').forEach((b) => b.addEventListener('click', () => {
         const i = Number(b.dataset.pdel);
-        prepPush(s);
         if (s.petals[i].uids.length && !confirm(`Supprimer le pétale ${petalName(i)} (${s.petals[i].uids.map(uidNum).join(', ')}) ?`)) return;
+        prepPush(s);
         s.petals.splice(i, 1);
         ssUI.petal = Math.max(0, i - 1);
         redo();
@@ -7453,7 +7465,7 @@
           sel('over.mode', B.over.mode, [['complete', 'complète'], ['started', 'commencée']]))}
         ${row('fast', B.fast.on, 'Bonus rapidité', `+ ${num('fast.pts', B.fast.pts)} point(s) par tranche de ${num('fast.step', B.fast.step, 5, 64)} s d’avance sur le temps imparti, au maximum + ${num('fast.max', B.fast.max)}`)}
         ${row('found', B.found.on, 'Bonus balises trouvées', `+ ${num('found.pts', B.found.pts)} point(s) par balise conforme`)}
-        <div class="ss-actions"><button class="btn" id="bmReset">Rétablir le barème du document</button></div>
+        <div class="ss-actions"><button class="btn" id="bmReset">Rétablir le barème par défaut</button></div>
       </details>`;
     }
     function bindBareme(c, ev, rerender) {
@@ -7487,7 +7499,7 @@
         done();
       }));
       $('bmReset').addEventListener('click', () => {
-        if (!confirm('Rétablir le barème du document (20/20, renoncements −1 à −10, −2, −1, −1 par 30 s) ?')) return;
+        if (!confirm('Rétablir le barème par défaut ?\n20/20 au départ · renoncements −1 à −10 · balise non rapportée −2 · photo non conforme −1 · groupe séparé −2 · −1 par tranche complète de 30 s de dépassement · bonus désactivés.')) return;
         ev.bareme = DEFAULT_BAREME();
         done();
       });
@@ -7675,15 +7687,19 @@
     }
 
     function applyEvalPreset(c, parcours) {
-      const e = c.eval && c.eval.status === 'prep' ? c.eval : newEval(10);
-      e.groups = Math.max(e.groups, 10);
+      // Le nombre de groupes reste celui de la classe (ou de l'évaluation déjà préparée) : on ne garde que les parcours utiles.
+      const e = c.eval && c.eval.status === 'prep' ? c.eval : newEval(c.groups);
+      const nDoc = Object.keys(parcours).length;
       e.parcours = {};
-      for (const g in parcours) e.parcours[g] = parcours[g].map((l) => l.slice());
+      for (const g in parcours) if (Number(g) <= e.groups) e.parcours[g] = parcours[g].map((l) => l.slice());
       c.eval = e;
-      const missing = [...new Set(Object.values(parcours).flat(2))].filter((n) => !markerByNumber(n)).sort((x, y) => x - y);
+      const used = Object.values(e.parcours);
+      const missing = [...new Set(used.flat(2))].filter((n) => !markerByNumber(n)).sort((x, y) => x - y);
+      const nbNote = e.groups < nDoc ? ` Parcours GR1 à GR${e.groups} repris (le document en prévoit ${nDoc}).`
+        : e.groups > nDoc ? ` Le document ne prévoit que ${nDoc} parcours : complétez GR${nDoc + 1} à GR${e.groups}.` : '';
       saveClasses();
       renderEval(c);
-      toast(missing.length ? `Parcours du document chargés. Balises absentes du plan : ${missing.join(', ')}.` : 'Parcours du document chargés (balises non marquées « réservées » : voir Contrôles).');
+      toast((missing.length ? `Parcours du document chargés. Balises absentes du plan : ${missing.join(', ')}.` : 'Parcours du document chargés (balises non marquées « réservées » : voir Contrôles).') + nbNote);
     }
     const confirmDoc = () => confirm('Ces parcours reprennent les numéros de balises du site des Guilands (document, séance 8). Les charger sur ce plan ?');
 
@@ -8142,7 +8158,7 @@
     // Compte à rebours + alerte à la fin du temps imparti (appelé chaque seconde).
     function evalTick() {
       const c = curClass(), ev = c && c.eval;
-      if (!ev || ev.status !== 'running' || sessionScreen.hidden) return;
+      if (!ev || ev.status !== 'running') return;
       const now = Date.now(), dur = ev.duration * 60000;
       for (let g = 1; g <= ev.groups; g++) {
         const gr = evalRun(ev, g);
@@ -8155,7 +8171,7 @@
           saveClasses();
           alarm(`⏱ GR${g} : les ${ev.duration} min du parcours ${gr.k + 1} sont écoulées.`);
         }
-        if (ssUI.tab !== 'eval') continue;
+        if (ssUI.tab !== 'eval' || sessionScreen.hidden) continue;
         const live = ssBody.querySelector(`[data-evlive="${g}"]`);
         if (live) live.textContent = rem < 0 ? '+' + fmtTime(-rem) : fmtTime(rem);
         const tile = ssBody.querySelector(`.gtile[data-evg="${g}"]`);
@@ -8338,6 +8354,9 @@
           state.legend = normLegend(doc && doc.legend);
           geoFit();
           try { state.classes = (await DB.get('classes')) || []; } catch (_) { state.classes = []; }
+          // Course ou évaluation en cours avant le rechargement : on relance chronos et alertes
+          selectDefaultSession();
+          if (courseEnCours()) startTicker();
           ensureUids();
           renderMarkers();
           resetHistory();
