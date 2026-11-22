@@ -1306,7 +1306,7 @@
     'use strict';
 
     const $ = (id) => document.getElementById(id);
-    const APP_VERSION = '2026-11-22-2'; // version test ← à incrémenter à chaque nouvelle mise en ligne
+    const APP_VERSION = '2026-11-22-3'; // version test ← à incrémenter à chaque nouvelle mise en ligne
     const SVGNS = 'http://www.w3.org/2000/svg';
     const MAX_PIXELS = 16000000; // limite de taille des canvas sur iOS
     const TAP_SLOP = 8;          // déplacement (px) en dessous duquel un toucher reste un « tap »
@@ -5368,7 +5368,7 @@
           <label for="nsFresh">Groupes recomposés<br><span class="ss-note">les groupes ont changé (absents…) : ne pas tenir compte des balises déjà eues par GR1, GR2… lors des séances précédentes</span></label>
           <span class="switch"><input type="checkbox" id="nsFresh"><span></span></span>
         </div>
-        <p class="ss-note"><strong>${plural(eligible, 'balise')} avec photo</strong> sur ${plural(state.markers.length, 'balise')} au total${state.markers.some((m) => m.reserved) ? ` (${plural(state.markers.filter((m) => m.reserved).length, 'balise')} réservée(s) à l’évaluation, jamais tirée(s))` : ''}. Chaque groupe reçoit uniquement des balises qu’il n’a <strong>jamais eues</strong> lors des séances précédentes (démarrées).</p>
+        <p class="ss-note"><strong>${plural(eligible, 'balise')} avec photo</strong> sur ${plural(state.markers.length, 'balise')} au total${state.markers.some((m) => m.reserved) ? ` (${plural(state.markers.filter((m) => m.reserved).length, 'balise')} réservée(s) à l’évaluation, jamais tirée(s))` : ''}. <span data-only="etoile">Chaque groupe reçoit uniquement des balises qu’il n’a <strong>jamais eues</strong> lors des séances précédentes (démarrées).</span><span data-only="papillon">La proposition prend d’abord des balises qu’<strong>aucun groupe</strong> n’a eues lors des séances précédentes (démarrées) ; s’il n’y en a pas assez, elle complète avec des balises déjà vues et vous le signale.</span></p>
         <div class="setting-row" style="padding:0">
           <label for="nsNoPhoto">Inclure les balises sans photo<br><span class="ss-note">(la validation se fera sans photo de référence)</span></label>
           <span class="switch"><input type="checkbox" id="nsNoPhoto" ${(last && last.withoutPhoto) || !eligible ? 'checked' : ''}><span></span></span>
@@ -5384,7 +5384,7 @@
         </div>
         <p class="info-box" data-only="etoile" id="infoNsOrder" hidden><strong>Échelonné</strong> : les balises restent rangées par numéro, mais chaque groupe commence par une autre (GR1 par la 1<sup>re</sup>, GR2 par la 2<sup>e</sup>…), pour que les groupes ne partent pas tous vers la même. <strong>Aléatoire</strong> : ordre mélangé, propre à chaque groupe. <strong>Croissant</strong> : ordre des numéros.</p>
         <div class="setting-row" style="padding:0">
-          <label for="nsImposed">Ordre imposé aux élèves<br><span class="ss-note">les balises devront être trouvées dans l’ordre de la carte</span></label>
+          <label for="nsImposed">Ordre imposé aux élèves<br><span class="ss-note" data-only="etoile">les balises devront être trouvées dans l’ordre de la carte</span><span class="ss-note" data-only="papillon">les pétales se font toujours dans l’ordre de la carte ; activé, les balises de chaque pétale aussi</span></label>
           <span class="switch"><input type="checkbox" id="nsImposed" ${last && last.imposed ? 'checked' : ''}><span></span></span>
         </div>
         <div class="warn" id="nsError" hidden></div>
@@ -5439,6 +5439,7 @@
           return;
         }
         addSession(s);
+        noteReused();
       });
       $('nsPapManual').addEventListener('click', () => {
         const s = newPapSession();
@@ -5878,8 +5879,8 @@
             fields: [['Noms :', 190]],
             footer: pap
               ? (s.imposed
-                ? 'Pétale après pétale, DANS CET ORDRE (départ → balises du pétale → départ) :'
-                : 'Pétale après pétale, dans l’ordre ci-dessus (départ → balises du pétale → départ) :')
+                ? 'Pétale après pétale, balises DANS CET ORDRE (départ → balises du pétale → départ) :'
+                : 'Pétale après pétale ; dans un pétale, balises dans l’ordre de votre choix (départ → balises → départ) :')
               : (s.imposed
                 ? 'Balises à trouver DANS CET ORDRE (retour au départ entre chaque) :'
                 : 'Balises à trouver (dans l’ordre de votre choix, retour au départ entre chaque) :'),
@@ -6734,6 +6735,11 @@
       syncPetals(s);
     }
 
+    // Numéros des balises déjà vues que la dernière proposition a dû reprendre (faute de balises neuves).
+    let petalsReused = [];
+    const noteReused = () => {
+      if (petalsReused.length) toast(`Pas assez de balises jamais eues : ${plural(petalsReused.length, 'balise')} déjà vue${petalsReused.length > 1 ? 's' : ''} lors de séances précédentes ${petalsReused.length > 1 ? 'ont été reprises' : 'a été reprise'} (n° ${petalsReused.join(', ')}).`);
+    };
     // Proposition automatique : balises jamais vues de préférence, regroupées par direction.
     // Si « privilégier les balises proches » est coché, les plus proches du départ sont choisies en priorité ;
     // sinon l'ensemble des balises disponibles est mélangé (tirage reproductible par s.seed).
@@ -6751,6 +6757,7 @@
       if (pool.length < count * size) pool = pool.concat(order(eligible.filter((m) => seenAny.has(m.uid))));
       const pick = pool.slice(0, Math.min(count * size, pool.length));
       if (pick.length < size) return false;
+      petalsReused = pick.filter((m) => seenAny.has(m.uid)).map((m) => m.number).sort((a, b) => a - b);
       const ang = (m) => Math.atan2(m.x - state.start.x, -(m.y - state.start.y));
       pick.sort((a, b) => ang(a) - ang(b));
       s.petals = [];
@@ -6852,7 +6859,7 @@
           </div>`;
 
       ssBody.innerHTML = `<div class="ss-card">
-          <h3>${escapeHtml(c.name)} — séance ${s.num} <span class="ss-note">papillon · ${plural(s.groups, 'groupe')} · ${plural(s.petals.length, 'pétale')}${pg ? ' · balises différentes selon les groupes' : ''}${s.sameOrder ? ' · même ordre pour tous' : ''}${s.imposed ? ' · <strong class="ss-warn">ordre imposé</strong>' : ''}${s.withoutPhoto ? ' · balises sans photo incluses' : ''}${s.freshGroups ? ' · groupes recomposés' : ''}</span></h3>
+          <h3>${escapeHtml(c.name)} — séance ${s.num} <span class="ss-note">papillon · ${plural(s.groups, 'groupe')} · ${plural(s.petals.length, 'pétale')}${pg ? ' · balises différentes selon les groupes' : ''}${s.sameOrder ? ' · même ordre pour tous' : ''}${s.imposed ? ' · <strong class="ss-warn">ordre des balises imposé</strong>' : ''}${s.withoutPhoto ? ' · balises sans photo incluses' : ''}${s.freshGroups ? ' · groupes recomposés' : ''}</span></h3>
           ${locked ? '' : sw('ppPerGroup', pg, 'Balises différentes selon les groupes', 'chaque pétale (= parcours A, B…) a une réserve de balises ; chaque groupe en reçoit quelques-unes, dans son propre ordre')}
           ${locked ? '' : sw('ppNear', nearOf(s), 'Privilégier les balises proches du départ', 'proposition automatique et liste ci-dessous')}
           ${locked ? '' : sw('ppFresh', s.freshGroups, 'Groupes recomposés', 'ne pas tenir compte des balises déjà eues par GR1, GR2… lors des séances précédentes')}
@@ -6863,7 +6870,7 @@
           ${chips ? `<p style="margin-top:12px"><strong>${petalName(ap)}</strong> : ${plural(s.petals[ap].uids.length, 'balise')}${pg ? ' en réserve' : ''}</p><div class="chip-grid">${chips}</div>
             <div class="legend"><span class="l-sel">dans ce pétale</span><span class="l-seen">déjà eue lors d’une séance précédente</span><span class="l-nophoto">sans photo</span><span class="l-res">réservée évaluation</span></div>` : ''}
           ${locked ? '' : `${sw('ppSame', s.sameOrder, 'Même ordre des pétales pour tous les groupes', 'tous font P1, puis P2… (parcours A puis B) ; sinon chaque groupe commence par un pétale différent')}
-          ${sw('ppImposed', s.imposed, 'Ordre imposé aux élèves', 'pétales et balises dans l’ordre indiqué')}
+          ${sw('ppImposed', s.imposed, 'Ordre des balises imposé dans chaque pétale', 'les pétales se font toujours dans l’ordre de la carte ; activé, les balises de chaque pétale aussi (sinon, ordre libre à l’intérieur du pétale)')}
           <div class="ss-actions">
             ${prepUndoBtns(s)}
             <button class="btn" id="ppAdd"><svg class="i"><use href="#i-plus"/></svg>Ajouter un pétale</button>
@@ -6977,10 +6984,10 @@
           const size = Math.max(1, Math.round(s.petals.reduce((a, p) => a + p.uids.length, 0) / Math.max(1, s.petals.length)) || 2);
           ok = proposePetals(c, s, Math.max(1, s.petals.length), size);
         }
-        if (!ok) toast('Pas assez de balises disponibles.');
         ssUI.petal = 0;
         saveClasses();
         renderPapillonPrep(c, s);
+        if (!ok) toast('Pas assez de balises disponibles.'); else noteReused();
       });
       ssBody.querySelectorAll('[data-spdf]').forEach((b) => b.addEventListener('click', () => exportSessionPdf(c, s, b.dataset.spdf)));
       on('spGoCourse', () => { ssUI.tab = 'course'; renderSessions(); });
@@ -7378,6 +7385,11 @@
       const renP = [0, 0], times = [];
       gr.p.forEach((pr, k) => {
         if (pr.state === 'idle') { times.push(null); return; }
+        if (pr.skipped) { // parcours jamais commencé, clos par « Fin de l'évaluation » : pas de temps, balises non rapportées
+          times.push(null);
+          for (const n of evalList(ev, g, k)) { engaged++; nr++; }
+          return;
+        }
         renP[k] = pr.renounce.length;
         ren += pr.renounce.length;
         const t = (pr.end || Date.now()) - pr.start;
@@ -7394,7 +7406,7 @@
           overMs += ex;
           const u = ex / (B.over.step * 1000);
           overUnits += B.over.mode === 'started' ? Math.ceil(u) : Math.floor(u);
-        } else {
+        } else if (!pr.interrupted) { // parcours arrêté par « Fin de l'évaluation » : pas d'avance ni de bonus
           aheadMs += -ex;
           fastUnits += Math.floor(-ex / (B.fast.step * 1000));
         }
@@ -8060,16 +8072,30 @@
       ssBody.querySelectorAll('[data-evg]').forEach((t) => t.addEventListener('click', () => onEvalTile(c, ev, Number(t.dataset.evg))));
       const on = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', fn); };
       on('evEnd', () => {
-        if (!confirm('Terminer l’évaluation ?\nUn groupe encore en course est arrêté maintenant ; un parcours non commencé compte ses balises comme non rapportées.')) return;
-        const t = Date.now();
+        const enCourse = [], nonFaits = [];
         for (let g = 1; g <= ev.groups; g++) {
           const gr = evalRun(ev, g);
-          pushUndo(gr);
+          for (let k = gr.k; k < 2; k++) {
+            if (!evalList(ev, g, k).length) continue;
+            if (gr.p[k].state === 'out') enCourse.push(`GR${g}`);
+            else nonFaits.push(`GR${g} (parcours ${k + 1})`);
+          }
+        }
+        const avert = [
+          enCourse.length ? `Encore en course : ${enCourse.join(', ')}. Le parcours en cours s’arrête maintenant et ses balises comptent comme non rapportées. Pour valider un retour, touchez d’abord la tuile du groupe.` : '',
+          nonFaits.length ? `Parcours non commencés : ${nonFaits.join(', ')}. Leurs balises comptent comme non rapportées (sans temps).` : ''
+        ].filter(Boolean).join('\n\n');
+        if (!confirm(`Terminer l’évaluation ?${avert ? '\n\n' + avert : ''}\n\n« Reprendre l’évaluation » permettra de revenir à l’état actuel.`)) return;
+        const t = Date.now();
+        ev.endSnap = {}; // état de chaque groupe juste avant la fin, pour « Reprendre l'évaluation »
+        for (let g = 1; g <= ev.groups; g++) {
+          const gr = evalRun(ev, g);
+          const { undo, ...rest } = gr;
+          ev.endSnap[g] = JSON.stringify(rest);
           for (let k = gr.k; k < 2; k++) {
             const pr = gr.p[k];
             if (!evalList(ev, g, k).length) continue;
-            if (pr.state === 'idle') { pr.start = t; }
-            pr.end = t;
+            if (pr.state === 'idle') { pr.skipped = true; pr.start = pr.end = null; } else { pr.end = t; pr.interrupted = true; }
             pr.state = 'done';
           }
           gr.k = 2;
@@ -8082,7 +8108,22 @@
         renderEval(c);
         toast('Évaluation terminée. Pensez à enregistrer le projet et à exporter les notes.', { label: 'Enregistrer', fn: saveProject });
       });
-      on('evReopen', () => { ev.status = 'running'; saveClasses(); renderEval(c); });
+      on('evReopen', () => {
+        // Chaque groupe retrouve son état d'avant « Fin de l'évaluation » (en course, au départ…)
+        let repris = 0;
+        if (ev.endSnap) {
+          for (const [g, snap] of Object.entries(ev.endSnap)) {
+            ev.runs[g] = Object.assign(JSON.parse(snap), { undo: evalRun(ev, Number(g)).undo });
+            repris++;
+          }
+          delete ev.endSnap;
+        }
+        ev.status = 'running';
+        delete ev.endedAt;
+        saveClasses();
+        renderEval(c);
+        toast(repris ? 'Évaluation reprise : chaque groupe retrouve son état d’avant la fin.' : 'Évaluation reprise.');
+      });
       on('evCsv', () => exportEvalCsv(c, ev));
       on('evSort', () => { ssUI.evSort = ssUI.evSort === 'group' ? 'note' : 'group'; renderEval(c); });
       bindBareme(c, ev, () => renderEval(c));
