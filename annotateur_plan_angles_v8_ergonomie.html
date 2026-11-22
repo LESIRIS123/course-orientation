@@ -1004,11 +1004,16 @@
       <input type="range" id="defaultSize" min="12" max="80" step="1" value="26" />
       <button class="btn" id="applySizeAll" style="width:100%; margin-top:6px;" data-needs-plan>Appliquer cette taille à tous les postes</button>
       <div class="setting-row" style="margin-top:8px;">
-        <label for="legendToggle">Légende Street-O sur les impressions
-          <button class="info-btn" data-info="infoLegend" title="À quoi ça sert ?" aria-label="Explication : légende Street-O">i</button></label>
-        <span class="switch"><input type="checkbox" id="legendToggle" /><span></span></span>
+        <label for="legendChoice">Légende sur les impressions
+          <button class="info-btn" data-info="infoLegend" title="À quoi ça sert ?" aria-label="Explication : légende">i</button></label>
       </div>
-      <p class="info-box" id="infoLegend" hidden>Ajoute une page de légende (deux exemplaires à découper) aux cartes des groupes, au plan annoté et au corrigé. Elle correspond aux cartes fabriquées avec OpenOrienteeringMap et s’active toute seule quand vous chargez une de ces cartes (fichier « oom_… »).</p>
+      <select class="ss-select" id="legendChoice" style="width:100%; margin-top:4px;">
+        <option value="">Pas de légende</option>
+        <option value="streeto">Carte Street-O (OpenOrienteeringMap)</option>
+        <option value="gen-course">Carte du générateur, style course d’orientation</option>
+        <option value="gen-scolaire">Carte du générateur, style scolaire</option>
+      </select>
+      <p class="info-box" id="infoLegend" hidden>Ajoute une page de légende (deux exemplaires à découper) aux cartes des groupes, au plan annoté et au corrigé. Elle se choisit toute seule : légende Street-O pour une carte OpenOrienteeringMap (fichier « oom_… »), légende du générateur pour une carte envoyée par « Carte de CO détaillée » (avec seulement les symboles présents sur la carte). Changez-la ici si besoin.</p>
       <div class="setting-row" style="margin-top:8px;">
         <span>Enregistrement des fichiers
           <button class="info-btn" data-info="infoSave" title="À quoi ça sert ?" aria-label="Explication : enregistrement des fichiers">i</button></span>
@@ -1295,7 +1300,7 @@
     'use strict';
 
     const $ = (id) => document.getElementById(id);
-    const APP_VERSION = '2026-11-21-4'; // version test ← à incrémenter à chaque nouvelle mise en ligne
+    const APP_VERSION = '2026-11-22-1'; // version test ← à incrémenter à chaque nouvelle mise en ligne
     const SVGNS = 'http://www.w3.org/2000/svg';
     const MAX_PIXELS = 16000000; // limite de taille des canvas sur iOS
     const TAP_SLOP = 8;          // déplacement (px) en dessous duquel un toucher reste un « tap »
@@ -2488,7 +2493,7 @@
     planInput.addEventListener('change', () => openPlanFiles([...planInput.files]));
     // Un plan, éventuellement accompagné de son fichier de position (.jgw, .pgw, .wld…) : il est alors calé tout seul.
     const isWorldFile = (f) => /\.(jgw|jpgw|jpw|pgw|pngw|wld)$/i.test(f.name);
-    function openPlanFiles(files) {
+    function openPlanFiles(files, legend = null) {
       hideToast(); // retire le rappel « Carte téléchargée ? » s'il est encore affiché
       const plan = files.find((f) => !isWorldFile(f));
       const world = files.find(isWorldFile) || null;
@@ -2496,7 +2501,7 @@
         toast(world ? 'Choisissez l’image de la carte (JPG) en même temps que ce fichier de position.' : 'Aucun plan dans ces fichiers.');
         return;
       }
-      loadPlanFile(plan, world);
+      loadPlanFile(plan, world, legend);
     }
     // Fichier de position (« world file », 6 nombres) : coordonnées Web Mercator (EPSG:3857) du centre de chaque
     // pixel, comme ceux d'OpenOrienteeringMap. On en déduit un calage exact : coins et centre du plan.
@@ -2520,7 +2525,7 @@
       return !!GT;
     }
 
-    async function loadPlanFile(file, world = null) {
+    async function loadPlanFile(file, world = null, legend = null) {
       const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
       let natW = 0, natH = 0;
       const baseName = file.name.replace(/\.[^.]+$/, '');
@@ -2546,9 +2551,11 @@
         }
         startNewPlan();
         setAddMode(true);
-        state.legend = /^oom_/i.test(file.name) ? 'streeto' : null; // carte OpenOrienteeringMap → légende Street-O
+        // Légende envoyée par le générateur ; sinon carte OpenOrienteeringMap → légende Street-O
+        state.legend = normLegend(legend) || (/^oom_/i.test(file.name) ? 'streeto' : null);
         scheduleSave();
-        const legendNote = legendOn() ? ' Légende Street-O ajoutée aux impressions.' : '';
+        const legendNote = state.legend === 'streeto' ? ' Légende Street-O ajoutée aux impressions.'
+          : legendOn() ? ' Légende de la carte ajoutée aux impressions.' : '';
         if (world && !isPdf && natW && await applyWorldFile(world, state.bg.w / natW, natW, natH)) {
           toast('Carte chargée et calée automatiquement (fichier de position).' + legendNote + ' Placez d’abord le départ / arrivée.', { label: 'Placer', fn: startPlacingStart });
         } else if (world) {
@@ -2600,7 +2607,7 @@
           ...(data.geo.proj === 'merc' ? { proj: 'merc' } : {})
         } : null;
         geoFit();
-        state.legend = data.legend === 'streeto' ? 'streeto' : null;
+        state.legend = normLegend(data.legend);
         state.photos = data.photos && typeof data.photos === 'object' ? data.photos : {};
         await clearStoredPhotos();
         Object.keys(state.photos).forEach(savePhoto);
@@ -3241,7 +3248,19 @@
         ['north', 'Ligne du nord (haut = nord)']
       ]]
     ];
-    const legendOn = () => state.legend === 'streeto';
+    // state.legend : null, 'streeto', ou { type: 'generateur', style, presents, mobilier, limite } (carte du générateur).
+    function normLegend(v) {
+      if (v === 'streeto') return 'streeto';
+      if (!v || typeof v !== 'object' || v.type !== 'generateur') return null;
+      const liste = (a) => (Array.isArray(a) ? a.map(String).slice(0, 60) : null);
+      return { type: 'generateur', style: v.style === 'scolaire' ? 'scolaire' : 'course',
+        presents: liste(v.presents), mobilier: liste(v.mobilier), limite: !!v.limite };
+    }
+    function legendKey() {
+      if (state.legend === 'streeto') return 'streeto';
+      return state.legend && state.legend.type === 'generateur' ? 'gen-' + state.legend.style : '';
+    }
+    function legendOn() { return !!legendKey(); }
     function wrapWords(str, max) {
       const out = [];
       let cur = '';
@@ -3307,15 +3326,147 @@
       });
       T(x + pad, y + 8 * s, 'Données © contributeurs OpenStreetMap (ODbL) · courbes : IGN (Licence Ouverte) · cartes OpenOrienteeringMap (O. O’Brien, D. Dixon) · légende : Angles de vue', 6, false, '#667085');
     }
+    // ---------- Légende des cartes du générateur (mêmes couleurs que rendu.py du générateur) ----------
+    // [clé de présence ou null = toujours, libellé, symbole, styles concernés ('course', 'scolaire' ou les deux)]
+    const GEN_C = { brun: '#C8641E', bleu: '#00A0E2', jaune: '#FFBA35', allee: '#F2DCC0', bati: '#7F7F7F', piste: '#E9A68C',
+      herbe: '#FFDD9A', v1: '#C5FFB9', v2: '#8BFF74', v3: '#3DFF17', arbre: '#2E9E48', haie: '#1F8F3A', abri: '#C8C8C8',
+      sOuvert: '#FFC65C', sArbres: '#BFE6B0', sDense: '#3DAE5A' };
+    const LEGEND_GEN = [
+      ['Végétation, terrain', [
+        [null, 'Bois facile à traverser', 'bois', 'course'],
+        [null, 'Broussailles (foncé = difficile)', 'verts', 'course'],
+        [null, 'Arbres, bois clair', ['area', GEN_C.sArbres], 'scolaire'],
+        [null, 'Bois très dense, difficile à traverser', ['area', GEN_C.sDense], 'scolaire'],
+        ['arbre', 'Arbre isolé', 'arbre'],
+        [null, 'Herbe, terrain dégagé', ['area', GEN_C.herbe], 'course'],
+        [null, 'Pelouse, terrain de sport', ['areaB', GEN_C.jaune], 'course'],
+        [null, 'Espace ouvert, pelouse', ['area', GEN_C.sOuvert], 'scolaire'],
+        [null, 'Terrain de sport', ['areaB', GEN_C.sOuvert], 'scolaire'],
+        ['vigne', 'Vigne, verger', 'vigne', 'course'],
+        ['haie', 'Haie', ['line', GEN_C.haie, 3]],
+        ['eau', 'Eau, piscine, ruisseau', ['areaB', GEN_C.bleu]],
+        [null, 'Courbe de niveau (tous les 2,5 m)', 'contour'],
+        [null, 'Butte · petit creux', 'butte']
+      ]],
+      ['Se déplacer, obstacles', [
+        [null, 'Bâtiment (on ne le traverse pas)', ['areaB', GEN_C.bati]],
+        [null, 'Route, parking, allée', 'route'],
+        ['sentier', 'Sentier', ['line', '#000000', 1.5, [6, 1.5]]],
+        ['escalier', 'Escalier', 'escalier'],
+        ['piste', 'Piste d’athlétisme', ['areaB', GEN_C.piste]],
+        ['cloture', 'Clôture, talus (une ouverture = un passage)', ['line', '#000000', 1.2]],
+        ['mur', 'Mur', ['line', '#000000', 2.4]],
+        ['ligne_elec', 'Ligne électrique, pylône', 'elec'],
+        ['limite', 'Limite de la zone', ['line', '#222222', 2.4]],
+        [null, 'Nord magnétique', ['line', GEN_C.bleu, 0.9]]
+      ]],
+      ['Repères', [
+        ['m:banc', 'Banc', 'banc'],
+        ['m:table', 'Table de pique-nique', 'cross'],
+        ['m:jeu', 'Jeu pour enfants', 'rond'],
+        ['m:point_eau', 'Point d’eau, fontaine', 'eauPt'],
+        ['m:monument', 'Statue, monument', 'monument'],
+        ['m:abri', 'Abri, préau', 'abri'],
+        ['m:wc', 'Toilettes', 'wc'],
+        ['m:info', 'Panneau d’information', 'info'],
+        ['m:vue', 'Point de vue', 'etoile'],
+        ['m:pylone', 'Pylône, mât', 'tri'],
+        ['m:lampadaire', 'Lampadaire', 'lampe'],
+        ['m:poubelle', 'Poubelle', 'poubelle']
+      ]]
+    ];
+    function drawLegendGen(ops, x, y, w, h, lg) {
+      const s = w / 520;
+      const T = (tx, ty, str, size, bold, col = '#172033') => ops.push(`BT /F${bold ? 2 : 1} ${pn(size * s)} Tf ${rgb(col)} rg ${pn(tx)} ${pn(ty)} Td ${pdfStr(str)} Tj ET`);
+      const L = (x1, y1, x2, y2, lw, col, dash) => ops.push(`q ${dash ? `[${dash.map((d) => pn(d * s)).join(' ')}] 0 d ` : ''}${rgb(col)} RG ${pn(lw * s)} w 0 J ${pn(x1)} ${pn(y1)} m ${pn(x2)} ${pn(y2)} l S Q`);
+      const R = (rx, ry, rw, rh, col, border) => ops.push(`q ${rgb(col)} rg ${border ? rgb(border) + ' RG ' + pn(0.6 * s) + ' w ' : ''}${pn(rx)} ${pn(ry)} ${pn(rw)} ${pn(rh)} re ${border ? 'B' : 'f'} Q`);
+      const C = (cx, cy, r, fill, stroke, lw = 1) => {
+        const k = 0.5523 * r;
+        const path = `${pn(cx + r)} ${pn(cy)} m ${pn(cx + r)} ${pn(cy + k)} ${pn(cx + k)} ${pn(cy + r)} ${pn(cx)} ${pn(cy + r)} c ` +
+          `${pn(cx - k)} ${pn(cy + r)} ${pn(cx - r)} ${pn(cy + k)} ${pn(cx - r)} ${pn(cy)} c ` +
+          `${pn(cx - r)} ${pn(cy - k)} ${pn(cx - k)} ${pn(cy - r)} ${pn(cx)} ${pn(cy - r)} c ` +
+          `${pn(cx + k)} ${pn(cy - r)} ${pn(cx + r)} ${pn(cy - k)} ${pn(cx + r)} ${pn(cy)} c`;
+        ops.push(`q ${fill ? rgb(fill) + ' rg ' : ''}${stroke ? rgb(stroke) + ' RG ' + pn(lw * s) + ' w ' : ''}${path} ${fill && stroke ? 'B' : fill ? 'f' : 'S'} Q`);
+      };
+      const P = (pts, fill) => ops.push(`q ${rgb(fill)} rg ${pts.map(([px, py], i) => `${pn(px)} ${pn(py)} ${i ? 'l' : 'm'}`).join(' ')} h f Q`);
+      const sc = lg.style === 'scolaire';
+      function sym(kind, sx, my, sw) {
+        const x2 = sx + sw, mid = sx + sw / 2, hh = 5.5 * s;
+        const [k, a, b, c] = Array.isArray(kind) ? kind : [kind];
+        if (k === 'area') R(sx, my - hh, sw, 2 * hh, a);
+        else if (k === 'areaB') R(sx, my - hh, sw, 2 * hh, a, '#000000');
+        else if (k === 'line') L(sx, my, x2, my, b, a, c);
+        else if (k === 'bois') R(sx, my - hh, sw, 2 * hh, '#FFFFFF', '#999999');
+        else if (k === 'verts') [GEN_C.v1, GEN_C.v2, GEN_C.v3].forEach((col, i) => R(sx + i * sw / 3, my - hh, sw / 3, 2 * hh, col));
+        else if (k === 'arbre') { R(sx, my - hh, sw, 2 * hh, sc ? GEN_C.sOuvert : '#FFFFFF', sc ? null : '#999999'); C(mid - 7 * s, my, 2.6 * s, GEN_C.arbre); C(mid + 7 * s, my, 2.6 * s, GEN_C.arbre); }
+        else if (k === 'vigne') { R(sx, my - hh, sw, 2 * hh, GEN_C.herbe); for (let i = 3; i < 40; i += 5) L(sx + i * s, my - hh, sx + i * s, my + hh, 0.8, GEN_C.v2); }
+        else if (k === 'contour') ops.push(`q ${rgb(GEN_C.brun)} RG ${pn(s)} w ${pn(sx)} ${pn(my)} m ${pn(sx + 10 * s)} ${pn(my + 5 * s)} ${pn(sx + 15 * s)} ${pn(my - 5 * s)} ${pn(sx + 20 * s)} ${pn(my)} c ${pn(sx + 25 * s)} ${pn(my + 5 * s)} ${pn(sx + 30 * s)} ${pn(my - 5 * s)} ${pn(x2)} ${pn(my)} c S Q`);
+        else if (k === 'butte') { C(sx + 11 * s, my, 2.2 * s, GEN_C.brun); T(sx + 24 * s, my - 3 * s, 'U', 8, false, GEN_C.brun); }
+        else if (k === 'route') { R(sx, my - hh, sw, 2 * hh, GEN_C.allee); L(sx, my - hh, x2, my - hh, 0.7, '#000000'); L(sx, my + hh, x2, my + hh, 0.7, '#000000'); }
+        else if (k === 'escalier') { R(sx, my - 3.5 * s, sw, 7 * s, GEN_C.allee); L(sx, my - 3.5 * s, x2, my - 3.5 * s, 0.6, '#000000'); L(sx, my + 3.5 * s, x2, my + 3.5 * s, 0.6, '#000000'); for (let i = 2; i < 40; i += 3) L(sx + i * s, my - 3.5 * s, sx + i * s, my + 3.5 * s, 0.5, '#000000'); }
+        else if (k === 'elec') { L(sx, my, x2, my, 0.8, '#000000'); P([[mid - 3 * s, my - 2.5 * s], [mid + 3 * s, my - 2.5 * s], [mid, my + 3 * s]], '#000000'); }
+        else if (k === 'banc') L(mid - 4 * s, my, mid + 4 * s, my, 2.6, '#000000');
+        else if (k === 'cross') { L(mid - 3 * s, my - 3 * s, mid + 3 * s, my + 3 * s, 1.1, '#000000'); L(mid - 3 * s, my + 3 * s, mid + 3 * s, my - 3 * s, 1.1, '#000000'); }
+        else if (k === 'rond') C(mid, my, 3.2 * s, null, '#000000', 1);
+        else if (k === 'eauPt') C(mid, my, 3 * s, '#FFFFFF', GEN_C.bleu, 1.4);
+        else if (k === 'monument') { C(mid, my, 3.2 * s, null, '#000000', 1); C(mid, my, 1.1 * s, '#000000'); }
+        else if (k === 'abri') R(mid - 3.4 * s, my - 3.4 * s, 6.8 * s, 6.8 * s, GEN_C.abri, '#000000');
+        else if (k === 'wc') T(mid - 5.5 * s, my - 2.8 * s, 'WC', 7.5, true);
+        else if (k === 'info') { C(mid, my, 3.7 * s, '#FFFFFF', '#000000', 0.7); T(mid - 1 * s, my - 2.6 * s, 'i', 7, true); }
+        else if (k === 'etoile') { const pts = []; for (let i = 0; i < 10; i++) { const r = (i % 2 ? 1.8 : 4.3) * s, t = Math.PI / 2 + i * Math.PI / 5; pts.push([mid + r * Math.cos(t), my + r * Math.sin(t)]); } P(pts, '#000000'); }
+        else if (k === 'tri') P([[mid - 3.2 * s, my - 2.6 * s], [mid + 3.2 * s, my - 2.6 * s], [mid, my + 3.4 * s]], '#000000');
+        else if (k === 'lampe') C(mid, my, 1.3 * s, '#000000');
+        else if (k === 'poubelle') R(mid - 2 * s, my - 2 * s, 4 * s, 4 * s, '#FFFFFF', '#000000');
+      }
+      // Entrées à afficher : celles du style choisi, présentes sur la carte (liste complète si inconnue)
+      const present = (cle) => {
+        if (!cle) return true;
+        if (cle === 'limite') return lg.limite;
+        if (cle.startsWith('m:')) return lg.mobilier ? lg.mobilier.includes(cle.slice(2)) : ['banc', 'table', 'jeu', 'point_eau', 'monument'].includes(cle.slice(2));
+        return lg.presents ? lg.presents.includes(cle) : cle !== 'limite';
+      };
+      const groupes = LEGEND_GEN.map(([titre, items]) => [titre, items.filter(([cle, , , st]) => (!st || st === lg.style) && present(cle))])
+        .filter(([, items]) => items.length);
+      ops.push(`q ${rgb('#333333')} RG ${pn(s)} w ${pn(x)} ${pn(y)} ${pn(w)} ${pn(h)} re S Q`);
+      const pad = 16 * s, top = y + h - pad;
+      T(x + pad, top - 13 * s, 'Légende de la carte de course d’orientation', 14, true);
+      T(x + pad, top - 26 * s, 'Carte fabriquée automatiquement : relief et végétation LiDAR HD de l’IGN, rues et repères OpenStreetMap', 8, false, '#475467');
+      const ry = top - 64 * s;
+      R(x + pad, ry, w - 2 * pad, 30 * s, '#F3F4F6');
+      T(x + pad + 7 * s, ry + 18 * s, sc ? 'Vert = arbres (vert foncé : on passe difficilement) ; jaune = espace ouvert, on y court facilement.'
+        : 'Blanc = bois où l’on court facilement ; vert = végétation gênante (plus c’est foncé, plus c’est dur).', 8.5, true);
+      T(x + pad + 7 * s, ry + 7 * s, 'On contourne les bâtiments (gris), les murs et les clôtures ; on passe par les ouvertures.', 8.5, false);
+      // Hauteur de ligne adaptée au nombre d'entrées de la colonne la plus remplie
+      const dispo = ry - 20 * s - (y + 18 * s) - 20 * s;
+      const maxLignes = Math.max(...groupes.map(([, items]) => items.reduce((n, it) => n + (wrapWords(it[1], 26).length > 1 ? 1.35 : 1), 0)));
+      const pas = Math.min(18 * s, dispo / Math.max(1, maxLignes));
+      const colGap = 14 * s, colW = (w - 2 * pad - 2 * colGap) / 3;
+      groupes.forEach(([titre, items], ci) => {
+        const cx = x + pad + ci * (colW + colGap);
+        let cy = ry - 20 * s;
+        T(cx, cy, titre.toUpperCase(), 8.5, true, '#333333');
+        L(cx, cy - 4 * s, cx + colW, cy - 4 * s, 0.6, '#CCCCCC');
+        cy -= 20 * s;
+        for (const [, label, kind] of items) {
+          const sw = 40 * s, my = cy + 3 * s;
+          sym(kind, cx, my, sw);
+          const lines = wrapWords(label, 26);
+          lines.forEach((ln, i) => T(cx + sw + 8 * s, my - 3 * s + (lines.length - 1) * 4.5 * s - i * 9.5 * s, ln, 8, false));
+          cy -= pas * (lines.length > 1 ? 1.35 : 1);
+        }
+      });
+      T(x + pad, y + 8 * s, 'Relief et végétation : LiDAR HD © IGN (Karttapullautin) · rues et repères © contributeurs OpenStreetMap (ODbL) · carte automatique, à vérifier sur le terrain', 6, false, '#667085');
+    }
     // Page de légende : deux exemplaires à découper.
     function legendPages(format) {
       const [W, H] = PAGE_SIZES[format] || PAGE_SIZES.A4;
       const M = PDF_MARGIN, gap = 22, bh = (H - 2 * M - gap) / 2, cut = M + bh + gap / 2;
       const ops = [];
-      drawLegend(ops, M, M + bh + gap, W - 2 * M, bh);
+      const un = (ly) => (state.legend === 'streeto' ? drawLegend(ops, M, ly, W - 2 * M, bh) : drawLegendGen(ops, M, ly, W - 2 * M, bh, state.legend));
+      un(M + bh + gap);
       ops.push(`q [4 3] 0 d ${rgb('#999999')} RG 0.6 w ${pn(M)} ${pn(cut)} m ${pn(W - M)} ${pn(cut)} l S Q`);
       ops.push(`BT /F1 7 Tf ${rgb('#999999')} rg ${pn(W / 2 - 14)} ${pn(cut + 3)} Td ${pdfStr('découper')} Tj ET`);
-      drawLegend(ops, M, M, W - 2 * M, bh);
+      un(M);
       return [{ w: W, h: H, ops }];
     }
     const withLegend = (format) => (legendOn() ? legendPages(format) : []);
@@ -3522,15 +3673,23 @@
     }
 
     // ---------- Menu et réglages ----------
-    const legendToggle = $('legendToggle');
-    legendToggle.addEventListener('change', () => {
-      state.legend = legendToggle.checked ? 'streeto' : null;
+    const legendChoice = $('legendChoice');
+    legendChoice.addEventListener('change', () => {
+      const v = legendChoice.value;
+      if (!v) state.legend = null;
+      else if (v === 'streeto') state.legend = 'streeto';
+      else {
+        const style = v === 'gen-scolaire' ? 'scolaire' : 'course';
+        // Même style que la carte reçue : on garde la liste exacte de ses symboles ; sinon légende complète.
+        state.legend = state.legend && state.legend.type === 'generateur' && state.legend.style === style
+          ? state.legend : { type: 'generateur', style, presents: null, mobilier: null, limite: false };
+      }
       scheduleSave();
       noteUnsavedChange();
-      toast(legendToggle.checked ? 'Une page de légende Street-O sera ajoutée aux impressions.' : 'Plus de page de légende dans les impressions.');
+      toast(legendOn() ? 'Une page de légende sera ajoutée aux impressions.' : 'Plus de page de légende dans les impressions.');
     });
     function openMenu() {
-      legendToggle.checked = state.legend === 'streeto';
+      legendChoice.value = legendKey();
       closeOverlays(); menu.hidden = false; backdrop.hidden = false;
       $('menuBtn').setAttribute('aria-expanded', 'true');
       menu.querySelector('[role="tab"][aria-selected="true"]').focus();
@@ -4054,7 +4213,8 @@
         return;
       }
       closeGenerator();
-      openPlanFiles([new File([d.png], nom + '_plan.png', { type: 'image/png' }), new File([d.pgw], nom + '_plan.pgw', { type: 'text/plain' })]);
+      openPlanFiles([new File([d.png], nom + '_plan.png', { type: 'image/png' }), new File([d.pgw], nom + '_plan.pgw', { type: 'text/plain' })],
+        normLegend(d.legende) || { type: 'generateur', style: 'course', presents: null, mobilier: null, limite: false });
     });
 
     // ---------- Photo prise dans l'appli : viseur, GPS et boussole au déclenchement ----------
@@ -8087,7 +8247,7 @@
           if (doc && doc.cardCfg) Object.assign(state.cardCfg, doc.cardCfg);
           state.start = (doc && doc.start) || null;
           state.geo = (doc && doc.geo) || null;
-          state.legend = doc && doc.legend === 'streeto' ? 'streeto' : null;
+          state.legend = normLegend(doc && doc.legend);
           geoFit();
           try { state.classes = (await DB.get('classes')) || []; } catch (_) { state.classes = []; }
           ensureUids();
