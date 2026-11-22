@@ -1306,7 +1306,7 @@
     'use strict';
 
     const $ = (id) => document.getElementById(id);
-    const APP_VERSION = '2026-11-22-4'; // version test ← à incrémenter à chaque nouvelle mise en ligne
+    const APP_VERSION = '2026-11-22-5'; // version test ← à incrémenter à chaque nouvelle mise en ligne
     const SVGNS = 'http://www.w3.org/2000/svg';
     const MAX_PIXELS = 16000000; // limite de taille des canvas sur iOS
     const TAP_SLOP = 8;          // déplacement (px) en dessous duquel un toucher reste un « tap »
@@ -2117,6 +2117,8 @@
     function deleteSelected() {
       const m = selectedMarker();
       if (!m) return;
+      const used = postesUtilises([m]);
+      if (used.length && !confirm(`Le poste n°${m.number} sert dans : ${listeCourte(used)}.\nLe supprimer quand même ? Ces séances afficheront « ? » à sa place.`)) return;
       state.markers = state.markers.filter((o) => o !== m);
       deselect();
       renderMarkers();
@@ -2477,11 +2479,14 @@
     async function changePdfPage(delta) {
       const n = pdf.page + delta;
       if (!pdf.doc || n < 1 || n > pdf.doc.numPages) return;
-      if (state.markers.length && !confirm('Changer de page effacera les postes actuels. Continuer ?')) return;
+      if (!confirmReplacePlan('Changer de page')) return;
       toast('Chargement de la page…');
       try {
+        const legend = state.legend; // même document : on garde la légende choisie
         await renderPdfPage(n);
         startNewPlan();
+        state.legend = legend;
+        scheduleSave();
         hideToast();
       } catch (err) {
         console.error(err);
@@ -2492,7 +2497,7 @@
     $('nextPageBtn').addEventListener('click', () => changePdfPage(1));
 
     function requestOpenPlan() {
-      if (state.markers.length && !confirm('Charger un nouveau plan effacera les postes actuels.\nPensez à enregistrer le projet si besoin. Continuer ?')) return;
+      if (!confirmReplacePlan('Charger un nouveau plan')) return;
       planInput.value = '';
       planInput.click();
     }
@@ -2577,7 +2582,7 @@
 
     // ---------- Projet JSON ----------
     function requestOpenProject() {
-      if (state.markers.length && !confirm('Ouvrir un projet remplacera le travail en cours. Continuer ?')) return;
+      if ((state.markers.length || state.classes.length) && !confirm('Ouvrir un projet remplacera le travail en cours (postes et séances). Continuer ?')) return;
       projectInput.value = '';
       projectInput.click();
     }
@@ -4254,7 +4259,7 @@
       // Accusé de réception : le générateur sait ainsi que la carte est bien arrivée.
       try { e.source && e.source.postMessage({ type: 'carte-co-recue', nom }, e.origin); } catch (_) { /* onglet fermé */ }
       try { window.focus(); } catch (_) { /* rien */ }
-      if (state.markers.length && !confirm(`La carte « ${nom} » est prête. La charger remplacera le plan actuel et effacera ses postes.\nPensez à enregistrer le projet si besoin. Continuer ?`)) {
+      if (!confirmReplacePlan(`La carte « ${nom} » est prête. La charger à la place du plan actuel`)) {
         toast('Carte non chargée : elle reste téléchargeable depuis la page du générateur.');
         return;
       }
@@ -4847,7 +4852,7 @@
     }
     $('mkCreate').addEventListener('click', async () => {
       if (!MK.map || MK.busy) return;
-      if (state.markers.length && !confirm('Créer un nouveau plan effacera les postes actuels.\nPensez à enregistrer le projet si besoin. Continuer ?')) return;
+      if (!confirmReplacePlan('Créer un nouveau plan')) return;
       MK.busy = true;
       $('mkCreate').disabled = true;
       try {
@@ -4953,6 +4958,10 @@
       showLegend: openLegend,
       clearMarkers: () => {
         if (!state.markers.length) return;
+        const used = postesUtilises(state.markers);
+        if (!confirm(`Effacer les ${plural(state.markers.length, 'poste')} du plan ?` +
+          (used.length ? `\nIls servent dans : ${listeCourte(used)} (ces séances afficheront « ? »).` : '') +
+          '\nVous pourrez revenir en arrière avec « Annuler ».')) return;
         state.markers = [];
         state.nextNumber = 1;
         nextNumberInput.value = 1;
@@ -5149,6 +5158,45 @@
     const curClass = () => state.classes.find((c) => c.id === ssUI.classId) || null;
     const curSession = () => { const c = curClass(); return (c && c.sessions.find((s) => s.id === ssUI.sessionId)) || null; };
     const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
+    const listeCourte = (l) => (l.length > 4 ? l.slice(0, 4).join(', ') + '…' : l.join(', '));
+    // Contenu des classes, pour prévenir avant un remplacement de plan (qui efface séances et résultats).
+    function classesSummary() {
+      if (!state.classes.length) return '';
+      let ses = 0, faites = 0, ev = 0;
+      for (const c of state.classes) {
+        ses += (c.sessions || []).length;
+        faites += (c.sessions || []).filter((s) => s.status === 'done' || s.status === 'running').length;
+        if (c.eval) ev++;
+      }
+      const parts = [plural(state.classes.length, 'classe')];
+      if (ses) parts.push(plural(ses, 'séance') + (faites ? ` dont ${faites} faite${faites > 1 ? 's' : ''} ou en cours` : ''));
+      if (ev) parts.push(plural(ev, 'évaluation'));
+      return parts.join(', ');
+    }
+    // Confirmation avant de remplacer le plan : les postes ET les séances (avec leurs résultats) sont effacés.
+    function confirmReplacePlan(intro) {
+      const cls = classesSummary();
+      if (!state.markers.length && !cls) return true;
+      const lost = [];
+      if (state.markers.length) lost.push(plural(state.markers.length, 'poste'));
+      if (cls) lost.push(`les séances (${cls}) avec tous leurs temps et notes`);
+      return confirm(`${intro} effacera ${lost.join(' et ')}.\nEnregistrez d’abord le projet (.json) si vous voulez les garder. Continuer ?`);
+    }
+    // Séances et évaluations qui utilisent ces postes (séances : par uid ; évaluation : par numéro).
+    function postesUtilises(markers) {
+      const uids = new Set(markers.map((m) => m.uid));
+      const nums = new Set(markers.map((m) => m.number).filter((n) => !state.markers.some((o) => !markers.includes(o) && o.number === n)));
+      const out = [];
+      for (const c of state.classes) {
+        for (const s of c.sessions || []) {
+          const all = [...Object.values(s.cards || {}).flat(),
+            ...(s.petals || []).flatMap((p) => [...(p.uids || []), ...Object.values(p.byGroup || {}).flat()])];
+          if (all.some((u) => uids.has(u))) out.push(`${c.name} séance ${s.num}`);
+        }
+        if (c.eval && Object.values(c.eval.parcours || {}).flat(2).some((n) => nums.has(n))) out.push(`${c.name} évaluation`);
+      }
+      return out;
+    }
     function fmtTime(ms) {
       const s = Math.max(0, Math.round(ms / 1000));
       const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = String(s % 60).padStart(2, '0');
@@ -8306,8 +8354,13 @@
       const f = files[0];
       if (!f) return;
       const isJson = /\.json$/i.test(f.name) || f.type === 'application/json';
-      if (state.markers.length && !confirm('Remplacer le travail en cours par ce fichier ?')) return;
-      isJson ? loadProjectFile(f) : openPlanFiles(files);
+      if (isJson) {
+        if ((state.markers.length || state.classes.length) && !confirm('Ouvrir ce projet remplacera le travail en cours (postes et séances). Continuer ?')) return;
+        loadProjectFile(f);
+      } else {
+        if (!confirmReplacePlan('Charger ce plan')) return;
+        openPlanFiles(files);
+      }
     });
 
     // ---------- Démarrage : reprise du travail précédent ----------
