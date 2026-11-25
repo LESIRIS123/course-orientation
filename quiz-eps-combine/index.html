@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quiz EPS – Combiné : demi-fond + lancer de vortex</title>
+<style>
+  :root{
+    --bg:#f4f6f8; --card:#fff; --ink:#1d2530; --muted:#5b6775; --line:#d9dee4;
+    --accent:#1f6feb; --accent-ink:#fff; --ok:#1a7f37; --ok-bg:#e6f4ea; --ko:#c62828; --ko-bg:#fdecea;
+    --run:#e8590c; --throw:#6741d9;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:18px;line-height:1.45}
+  .wrap{max-width:760px;margin:0 auto;padding:16px}
+  header{display:flex;align-items:center;gap:10px;margin:4px 0 14px}
+  header h1{font-size:20px;margin:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  h2{font-size:22px;margin:0 0 12px}
+  label.f{display:block;font-weight:600;margin:14px 0 6px}
+  input[type=text],textarea{width:100%;font:inherit;padding:12px;border:2px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+  input[type=text]:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  textarea{min-height:120px;resize:vertical}
+  .btn{display:inline-block;font:inherit;font-weight:700;border:0;border-radius:12px;padding:14px 22px;background:var(--accent);color:var(--accent-ink);cursor:pointer;margin-top:16px}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn.sec{background:#e9edf2;color:var(--ink)}
+  .btn.big{width:100%;font-size:19px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .progress{height:10px;background:#e3e7ec;border-radius:99px;overflow:hidden;margin-bottom:8px}
+  .progress > div{height:100%;background:var(--accent);transition:width .3s}
+  .meta{display:flex;justify-content:space-between;color:var(--muted);font-size:15px;margin-bottom:12px}
+  .tag{display:inline-block;font-size:14px;font-weight:700;padding:3px 10px;border-radius:99px;color:#fff;margin-bottom:10px}
+  .tag.run{background:var(--run)} .tag.throw{background:var(--throw)}
+  .q{font-size:20px;font-weight:650;margin:0 0 14px}
+  .opts{display:grid;gap:10px}
+  .opt{display:flex;gap:12px;align-items:flex-start;text-align:left;font:inherit;width:100%;padding:14px;border:2px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);cursor:pointer}
+  .opt .l{flex:0 0 30px;height:30px;border-radius:50%;background:#eef1f5;display:flex;align-items:center;justify-content:center;font-weight:800}
+  .opt.sel{border-color:var(--accent);background:#eef4ff}
+  .opt.sel .l{background:var(--accent);color:#fff}
+  .opt.good{border-color:var(--ok);background:var(--ok-bg)}
+  .opt.good .l{background:var(--ok);color:#fff}
+  .opt.bad{border-color:var(--ko);background:var(--ko-bg)}
+  .opt.bad .l{background:var(--ko);color:#fff}
+  .opt:disabled{cursor:default}
+  .opts.pics{grid-template-columns:repeat(3,1fr)}
+  .opts.pics .opt{flex-direction:column;align-items:center;padding:8px}
+  .opts.pics svg{width:100%;height:auto;max-height:190px}
+  .figure{margin:4px 0 16px;text-align:center}
+  .figure svg{width:100%;max-width:560px;height:auto}
+  .fb{margin-top:16px;padding:14px;border-radius:12px;font-size:17px}
+  .fb.ok{background:var(--ok-bg);border:1px solid #b7dfc2}
+  .fb.ko{background:var(--ko-bg);border:1px solid #f5c2bd}
+  .fb.info{background:#eef4ff;border:1px solid #c9dafc}
+  .fb b{display:block;margin-bottom:4px}
+  table.vma{border-collapse:collapse;margin:0 auto 16px;font-size:16px}
+  table.vma th,table.vma td{border:1px solid #999;padding:5px 12px;text-align:center}
+  table.vma th{background:#eef1f5}
+  table.vma tr.hl td{background:#fff3bf;font-weight:700}
+  .score{font-size:44px;font-weight:800;text-align:center;margin:6px 0}
+  .parts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+  .part{border-radius:12px;padding:12px;text-align:center;color:#fff}
+  .part.run{background:var(--run)} .part.throw{background:var(--throw)}
+  .part div{font-size:28px;font-weight:800}
+  ol.steps{padding-left:22px} ol.steps li{margin:8px 0}
+  .mail{font-weight:700;word-break:break-all;background:#eef1f5;padding:2px 6px;border-radius:6px}
+  .small{font-size:15px;color:var(--muted)}
+  .recap{margin-top:18px;border-top:1px solid var(--line);padding-top:10px}
+  .recap div{padding:6px 0;border-bottom:1px dashed var(--line);font-size:15px}
+  @media (max-width:520px){ body{font-size:17px} .q{font-size:18px} .card{padding:16px} .opts.pics{gap:6px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#1f6feb"/><path d="M7 12.5l3 3 7-7" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg><h1>Quiz EPS – Combiné : demi-fond + lancer de vortex</h1></header>
+  <main id="app" class="card"></main>
+</div>
+
+<script>
+/* =========================================================
+   RÉGLAGES DU PROFESSEUR
+   ========================================================= */
+const PROF_EMAIL = "gaspard.lyceehenaff@gmail.com";
+const TITRE = "Quiz EPS – Combiné (demi-fond + lancer de vortex)";
+const STORAGE = "quizEPScombine_v1";
+
+/* =========================================================
+   SCHÉMAS (SVG)
+   ========================================================= */
+const C = { ink:"#1d2530", grey:"#9aa4af" };
+
+// Coureur vu de profil, qui avance vers la droite
+function runner(lean, arms, headDown){
+  const t = lean*Math.PI/180, H=[60,92];
+  const S=[H[0]+44*Math.sin(t), H[1]-44*Math.cos(t)];
+  const hd = headDown ? t+0.55 : t;
+  const Hc=[S[0]+13*Math.sin(hd), S[1]-13*Math.cos(hd)];
+  const p=(a,dx,dy)=>[a[0]+dx,a[1]+dy];
+  let A1,A2,B1,B2;
+  if(arms==="bent"){ A1=p(S,9,17); A2=p(S,24,8); B1=p(S,-13,15); B2=p(S,-5,30); }
+  else if(arms==="hang"){ A1=p(S,5,20); A2=p(S,8,40); B1=p(S,-5,20); B2=p(S,-7,40); }
+  else { A1=p(S,19,2); A2=p(S,38,3); B1=p(S,18,6); B2=p(S,36,8); }
+  const K1=p(H,16,24), F1=p(H,12,54), K2=p(H,-8,28), F2=p(H,-27,45);
+  const L=(a,b,c)=>`<polyline points="${a.join(",")} ${b.join(",")} ${c.join(",")}" fill="none" stroke="${C.ink}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>`;
+  return `<svg viewBox="0 0 125 155" xmlns="http://www.w3.org/2000/svg">
+    <line x1="2" y1="149" x2="123" y2="149" stroke="${C.grey}" stroke-width="2"/>
+    ${L(H,K2,F2)}${L(S,B1,B2)}
+    <line x1="${H[0]}" y1="${H[1]}" x2="${S[0]}" y2="${S[1]}" stroke="${C.ink}" stroke-width="6" stroke-linecap="round"/>
+    ${L(H,K1,F1)}${L(S,A1,A2)}
+    <circle cx="${Hc[0]}" cy="${Hc[1]}" r="9" fill="${C.ink}"/>
+    <text x="118" y="18" font-size="12" fill="${C.grey}" text-anchor="end">→</text>
+  </svg>`;
+}
+
+// Placement des pieds vu de dessus (lanceur droitier)
+function feet(g, d){
+  const foot=(f,l,col)=>`<g transform="translate(${f[0]},${f[1]}) rotate(${f[2]})"><ellipse rx="17" ry="8" fill="${col}"/><text x="0" y="5" font-size="13" font-weight="700" text-anchor="middle" fill="#fff" transform="rotate(${-f[2]})">${l}</text></g>`;
+  return `<svg viewBox="0 0 140 125" xmlns="http://www.w3.org/2000/svg">
+    <line x1="15" y1="14" x2="118" y2="14" stroke="${C.grey}" stroke-width="3"/>
+    <polygon points="128,14 116,7 116,21" fill="${C.grey}"/>
+    <text x="70" y="34" font-size="10" text-anchor="middle" fill="#5b6775">sens du lancer</text>
+    ${foot(g,"G","#1f6feb")}${foot(d,"D","#e8590c")}
+  </svg>`;
+}
+
+// Trajectoires du vortex
+function trajectories(){
+  return `<svg viewBox="0 0 330 165" xmlns="http://www.w3.org/2000/svg">
+    <line x1="0" y1="145" x2="330" y2="145" stroke="${C.grey}" stroke-width="2"/>
+    <circle cx="22" cy="104" r="6" fill="${C.ink}"/>
+    <line x1="22" y1="110" x2="22" y2="128" stroke="${C.ink}" stroke-width="4"/>
+    <polyline points="14,145 22,128 30,145" fill="none" stroke="${C.ink}" stroke-width="4"/>
+    <path d="M28,118 Q85,104 140,145" fill="none" stroke="#1f6feb" stroke-width="3" stroke-dasharray="6 4"/>
+    <path d="M28,118 Q160,-25 300,145" fill="none" stroke="#2f9e44" stroke-width="3" stroke-dasharray="6 4"/>
+    <path d="M28,118 Q58,-95 110,145" fill="none" stroke="#e8590c" stroke-width="3" stroke-dasharray="6 4"/>
+    <text x="118" y="122" font-size="16" font-weight="800" fill="#1f6feb">A</text>
+    <text x="196" y="50" font-size="16" font-weight="800" fill="#2f9e44">B</text>
+    <text x="80" y="22" font-size="16" font-weight="800" fill="#e8590c">C</text>
+  </svg>`;
+}
+
+// Graphiques "plots par minute"
+function bars(vals, objectif){
+  const w=11, gap=3, x0=18, base=78, k=2.8;
+  let s=`<svg viewBox="0 0 150 100" xmlns="http://www.w3.org/2000/svg">
+    <line x1="${x0-2}" y1="${base}" x2="146" y2="${base}" stroke="${C.grey}"/>`;
+  vals.forEach((v,i)=>{ const h=v*k; s+=`<rect x="${x0+i*(w+gap)}" y="${base-h}" width="${w}" height="${h}" rx="2" fill="#e8590c"/>
+    <text x="${x0+i*(w+gap)+w/2}" y="${base+11}" font-size="8" text-anchor="middle" fill="#5b6775">${i+1}</text>
+    <text x="${x0+i*(w+gap)+w/2}" y="${base-h-2}" font-size="7" text-anchor="middle" fill="${C.ink}">${v}</text>`; });
+  s+=`<text x="82" y="97" font-size="8" text-anchor="middle" fill="#5b6775">minutes</text></svg>`;
+  return s;
+}
+
+const VMA_TABLE = `<table class="vma">
+  <tr><th>VMA</th><th>VÉLO<br>70 %</th><th>SCOOTER<br>80 %</th><th>MOTO<br>90 %</th></tr>
+  <tr><td>14 km/h</td><td>16</td><td>19</td><td>21</td></tr>
+  <tr><td>13 km/h</td><td>15</td><td>17</td><td>19</td></tr>
+  <tr class="hl"><td>12 km/h</td><td>14</td><td>16</td><td>18</td></tr>
+  <tr><td>11 km/h</td><td>13</td><td>15</td><td>16</td></tr>
+  <tr><td>10 km/h</td><td>12</td><td>13</td><td>15</td></tr>
+</table><p class="small" style="text-align:center;margin-top:-8px">(nombre de plots par minute)</p>`;
+
+/* =========================================================
+   QUESTIONS
+   theme: "run" (demi-fond) ou "throw" (vortex)
+   answer: index de la bonne réponse (0 = A, 1 = B, 2 = C)
+   ========================================================= */
+const QUESTIONS = [
+  // ---------------- DEMI-FOND ----------------
+  { theme:"run", q:"Pendant la course de 9 minutes, je pars très vite dès le début. Que va-t-il se passer ?",
+    options:["Je vais garder cette vitesse jusqu'au bout.","Je vais vite être essoufflé, ralentir, et peut-être marcher.","Je vais pouvoir accélérer encore à la fin."],
+    answer:1, explain:"Si je pars trop vite, je dépense toute mon énergie au début. Ensuite je suis « mort » et je ralentis beaucoup." },
+
+  { theme:"run", q:"C'est quoi « courir à une allure régulière » ?",
+    options:["Courir le plus vite possible.","Alterner sprint et marche.","Courir à la même vitesse du début à la fin."],
+    answer:2, explain:"Une allure régulière = la même vitesse pendant toute la course, donc le même nombre de plots à chaque minute." },
+
+  { theme:"run", q:"Voici 3 élèves. Chaque barre = le nombre de plots faits pendant une minute. Qui a couru à une allure régulière ?",
+    pics:[bars([22,21,19,17,15,13,12,11,10]), bars([17,20,13,19,12,18,14,20,13]), bars([16,16,17,16,16,16,17,16,16])],
+    options:["Élève A (beaucoup au début, puis de moins en moins)","Élève B (ça monte et ça descend tout le temps)","Élève C (presque le même nombre à chaque minute)"],
+    answer:2, explain:"L'élève C fait presque le même nombre de plots chaque minute : c'est une allure régulière. L'élève A est parti trop vite. L'élève B change de vitesse sans arrêt." },
+
+  { theme:"run", q:"Pourquoi faut-il garder une allure régulière ?",
+    options:["Pour économiser son énergie et tenir les 9 minutes.","Pour finir avant les autres.","Parce que c'est obligatoire dans le règlement."],
+    answer:0, explain:"Une allure régulière permet de bien répartir son énergie : on n'est pas épuisé et on peut courir jusqu'au bout." },
+
+  { theme:"run", q:"Ma VMA est de 12 km/h. Je choisis le projet SCOOTER. Combien de plots dois-je faire par minute ?",
+    html:VMA_TABLE,
+    options:["14 plots","16 plots","18 plots"],
+    answer:1, explain:"Ligne 12 km/h, colonne SCOOTER (80 %) : 16 plots par minute. 14 = vélo, 18 = moto." },
+
+  { theme:"run", q:"Quel projet est le plus facile à tenir pendant 9 minutes ?",
+    options:["Vélo (70 % de ma VMA)","Scooter (80 % de ma VMA)","Moto (90 % de ma VMA)"],
+    answer:0, explain:"Le vélo est la vitesse la plus faible (70 % de la VMA). C'est le plus facile à tenir longtemps. La moto est la plus dure." },
+
+  { theme:"run", q:"Mon objectif est 15 plots par minute. À la 1re minute, l'observateur me dit que j'ai fait 19 plots. Que dois-je faire ?",
+    options:["Continuer comme ça, c'est super.","Ralentir pour revenir à 15 plots.","Accélérer encore."],
+    answer:1, explain:"19 plots, c'est trop vite par rapport à mon objectif. Si je continue, je vais m'épuiser. Je ralentis pour revenir à 15." },
+
+  { theme:"run", q:"Mon objectif est 15 plots par minute. À la 5e minute, j'ai fait seulement 13 plots. Que dois-je faire ?",
+    options:["M'arrêter, c'est raté.","Sprinter à fond jusqu'à la fin.","Accélérer un petit peu pour revenir à 15 plots."],
+    answer:2, explain:"Je suis un peu en dessous : j'accélère légèrement pour retrouver mon allure, sans sprinter (sinon je m'épuise)." },
+
+  { theme:"run", q:"Comment je sais que je cours à la bonne allure pendant la course ?",
+    options:["Je regarde ce que font les autres et je les suis.","L'observateur m'annonce mon nombre de plots à chaque minute.","Je cours toujours derrière l'élève le plus rapide."],
+    answer:1, explain:"L'observateur compte mes plots à chaque minute. Je compare avec mon objectif : trop = je ralentis, pas assez = j'accélère un peu." },
+
+  { theme:"run", q:"Pendant la course en durée, ma respiration doit être…",
+    options:["Complètement à bout de souffle dès la 2e minute.","Forte, mais je peux encore dire quelques mots.","Bloquée : je retiens ma respiration."],
+    answer:1, explain:"Si je peux encore dire quelques mots, mon allure est bonne. Si je suis à bout de souffle très vite, je suis parti trop vite." },
+
+  { theme:"run", q:"Regarde les 3 coureurs. Lequel a la bonne position du corps ?",
+    pics:[runner(-22,"bent",false), runner(6,"bent",false), runner(48,"bent",true)],
+    options:["Coureur A (corps penché en arrière)","Coureur B (corps droit, un peu vers l'avant, regard devant)","Coureur C (très penché en avant, tête baissée)"],
+    answer:1, explain:"Le bon coureur a le corps droit (légèrement vers l'avant), la tête droite et le regard devant." },
+
+  { theme:"run", q:"Regarde les 3 coureurs. Lequel utilise bien ses bras ?",
+    pics:[runner(8,"hang",false), runner(8,"straight",false), runner(8,"bent",false)],
+    options:["Coureur A (bras qui pendent le long du corps)","Coureur B (bras tendus devant)","Coureur C (coudes pliés, bras qui vont d'avant en arrière)"],
+    answer:2, explain:"Les bras sont pliés (environ à angle droit) et balancent d'avant en arrière. Ils aident les jambes à avancer." },
+
+  { theme:"run", q:"Quand je cours, où dois-je regarder ?",
+    options:["Mes pieds.","Devant moi, à quelques mètres.","Le ciel."],
+    answer:1, explain:"Je regarde devant moi : la tête reste droite et je cours mieux." },
+
+  { theme:"run", type:"open", q:"Explique avec tes mots pourquoi il ne faut pas partir trop vite en course en durée.",
+    hint:"Une ou deux phrases suffisent." },
+
+  // ---------------- LANCER DE VORTEX ----------------
+  { theme:"throw", q:"Je suis droitier (je lance avec le bras droit). Quel pied je mets devant ?",
+    options:["Le pied droit.","Le pied gauche.","Les deux pieds côte à côte."],
+    answer:1, explain:"On met devant le pied opposé au bras qui lance. Droitier → pied GAUCHE devant. Gaucher → pied DROIT devant." },
+
+  { theme:"throw", q:"Vue de dessus : un lanceur DROITIER se place pour lancer. Quelle position de départ est la bonne ?",
+    pics:[feet([70,58,0],[70,98,0]), feet([102,72,0],[42,84,-60]), feet([42,62,60],[102,74,0])],
+    options:["Position A (pieds côte à côte, face au lancer)","Position B (pied gauche devant, corps de profil)","Position C (pied droit devant)"],
+    answer:1, explain:"Le droitier se met de profil avec le pied gauche devant. Comme ça, il peut tourner le bassin et lancer plus fort." },
+
+  { theme:"throw", q:"Au départ du lancer, où est mon bras lanceur ?",
+    options:["Plié devant ma poitrine.","Tendu, loin derrière moi.","Collé contre ma jambe."],
+    answer:1, explain:"Le bras est tendu loin derrière : plus le chemin du bras est long, plus le vortex part vite." },
+
+  { theme:"throw", q:"Pour lancer loin, quelle partie du corps tourne EN PREMIER vers l'avant ?",
+    options:["Le bras.","La tête.","Le bassin (les hanches)."],
+    answer:2, explain:"C'est le bassin qui tourne en premier vers l'avant, puis les épaules, et le bras part en dernier comme un fouet." },
+
+  { theme:"throw", q:"Quel est le bon ordre pour lancer ?",
+    options:["Bras → bassin → épaules","Jambes et bassin → épaules → bras","Épaules → bras → jambes"],
+    answer:1, explain:"Le mouvement part du bas : jambes et bassin, puis épaules, puis le bras. Chaque partie donne de la vitesse à la suivante." },
+
+  { theme:"throw", q:"À quoi sert la rotation du bassin ?",
+    options:["À donner plus de force et de vitesse au lancer.","À rien, seul le bras compte.","À garder l'équilibre après le lancer seulement."],
+    answer:0, explain:"En tournant le bassin, j'utilise tout mon corps (et pas seulement le bras) : le lancer est beaucoup plus puissant." },
+
+  { theme:"throw", q:"Quelle trajectoire envoie le vortex le plus loin ?",
+    figure:trajectories(),
+    options:["Trajectoire A (presque à plat)","Trajectoire B (vers le haut et vers l'avant)","Trajectoire C (très haut, presque vertical)"],
+    answer:1, explain:"Il faut lancer vers le haut et vers l'avant (environ 40°). Trop à plat, le vortex tombe vite. Trop haut, il monte mais n'avance pas." },
+
+  { theme:"throw", q:"Au moment de lâcher le vortex, mon bras est…",
+    options:["Tendu, coude haut, au-dessus de l'épaule.","Plié, coude en bas.","Lancé par en dessous, comme à la pétanque."],
+    answer:0, explain:"Le bras passe au-dessus de l'épaule, coude haut, et se tend au moment de lâcher." },
+
+  { theme:"throw", q:"À quoi sert la course d'élan (les pas d'élan) avant de lancer ?",
+    options:["À prendre de la vitesse pour lancer plus loin.","À rien.","À fatiguer le lanceur."],
+    answer:0, explain:"L'élan donne de la vitesse à tout le corps. Cette vitesse est transmise au vortex." },
+
+  { theme:"throw", q:"Que se passe-t-il si je mords (je dépasse) la ligne de lancer ?",
+    options:["Le lancer compte quand même.","J'ai un bonus d'un mètre.","Le lancer est nul."],
+    answer:2, explain:"Si je dépasse la ligne, le lancer ne compte pas. Je dois rester derrière la ligne, même après avoir lâché le vortex." },
+
+  { theme:"throw", type:"open", q:"Donne 2 conseils à un camarade pour qu'il lance le vortex plus loin.",
+    hint:"Pense aux pieds, au bras, au bassin, à la trajectoire…" }
+];
+
+/* =========================================================
+   LOGIQUE DU QUIZ
+   ========================================================= */
+const app = document.getElementById("app");
+const LETTERS = ["A","B","C","D"];
+let S = load() || { step:"home", eleve:{prenom:"",nom:"",classe:""}, i:0, answers:[], validated:false, start:null, end:null };
+
+function save(){ try{ localStorage.setItem(STORAGE, JSON.stringify(S)); }catch(e){} }
+function load(){ try{ return JSON.parse(localStorage.getItem(STORAGE)); }catch(e){ return null; } }
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+const nbQcm = QUESTIONS.filter(q=>q.type!=="open").length;
+
+function render(){
+  if(S.step==="home") return renderHome();
+  if(S.step==="quiz") return renderQuestion();
+  if(S.step==="end") return renderEnd();
+}
+
+function renderHome(){
+  const resume = S.answers.length>0;
+  app.innerHTML = `
+    <h2>Bienvenue !</h2>
+    <p>Ce quiz porte sur ce qu'on a travaillé en cours :</p>
+    <p><span class="tag run">Course en durée (demi-fond)</span> l'allure, la régularité, la façon de courir.<br>
+       <span class="tag throw">Lancer de vortex</span> les critères pour lancer loin.</p>
+    <p class="small">${QUESTIONS.length} questions · environ 20 minutes · lis bien chaque question. Après chaque réponse, tu vois la correction.</p>
+    <label class="f" for="prenom">Prénom</label><input type="text" id="prenom" autocomplete="given-name" value="${esc(S.eleve.prenom)}">
+    <label class="f" for="nom">Nom</label><input type="text" id="nom" autocomplete="family-name" value="${esc(S.eleve.nom)}">
+    <label class="f" for="classe">Classe</label><input type="text" id="classe" placeholder="ex : 1re pro …" value="${esc(S.eleve.classe)}">
+    <button class="btn big" id="go" disabled>${resume ? "Reprendre le quiz" : "Commencer le quiz"}</button>
+    ${resume ? `<button class="btn sec big" id="reset">Recommencer à zéro</button>` : ""}`;
+  const ids=["prenom","nom","classe"], go=document.getElementById("go");
+  const check=()=>{ go.disabled = !ids.every(id=>document.getElementById(id).value.trim().length>0); };
+  ids.forEach(id=>document.getElementById(id).addEventListener("input",check)); check();
+  go.onclick=()=>{
+    ids.forEach(id=>S.eleve[id]=document.getElementById(id).value.trim());
+    if(!S.start) S.start=new Date().toISOString();
+    S.step="quiz"; save(); render(); window.scrollTo(0,0);
+  };
+  const r=document.getElementById("reset");
+  if(r) r.onclick=()=>{ if(confirm("Effacer tes réponses et recommencer ?")){ localStorage.removeItem(STORAGE); S={step:"home",eleve:{prenom:"",nom:"",classe:""},i:0,answers:[],validated:false,start:null,end:null}; render(); } };
+}
+
+function renderQuestion(){
+  const q = QUESTIONS[S.i], a = S.answers[S.i], done = S.validated;
+  const pct = Math.round(S.i/QUESTIONS.length*100);
+  let body = "";
+  if(q.figure) body += `<div class="figure">${q.figure}</div>`;
+  if(q.html) body += q.html;
+  if(q.type==="open"){
+    body += `<textarea id="txt" placeholder="Écris ta réponse ici…" ${done?"disabled":""}>${a?esc(a.text):""}</textarea><p class="small">${q.hint||""}</p>`;
+  } else if(q.pics){
+    body += `<div class="opts pics">` + q.pics.map((svg,k)=>`<button class="opt ${cls(q,a,k,done)}" data-k="${k}" ${done?"disabled":""} aria-label="${esc(q.options[k])}">${svg}<span class="l">${LETTERS[k]}</span></button>`).join("") + `</div>`;
+  } else {
+    body += `<div class="opts">` + q.options.map((o,k)=>`<button class="opt ${cls(q,a,k,done)}" data-k="${k}" ${done?"disabled":""}><span class="l">${LETTERS[k]}</span><span>${esc(o)}</span></button>`).join("") + `</div>`;
+  }
+  let fb = "";
+  if(done){
+    if(q.type==="open") fb = `<div class="fb info"><b>Réponse enregistrée.</b>Ton professeur lira ta réponse.</div>`;
+    else if(a.choice===q.answer) fb = `<div class="fb ok"><b>✔ Bonne réponse !</b>${esc(q.explain)}</div>`;
+    else fb = `<div class="fb ko"><b>✘ Ce n'est pas ça. La bonne réponse était ${LETTERS[q.answer]}.</b>${esc(q.explain)}</div>`;
+  }
+  const last = S.i===QUESTIONS.length-1;
+  app.innerHTML = `
+    <div class="progress"><div style="width:${pct}%"></div></div>
+    <div class="meta"><span>Question ${S.i+1} / ${QUESTIONS.length}</span><span>${esc(S.eleve.prenom)}</span></div>
+    <span class="tag ${q.theme}">${q.theme==="run"?"Course en durée":"Lancer de vortex"}</span>
+    <p class="q">${esc(q.q)}</p>
+    ${body}${fb}
+    ${done ? `<button class="btn big" id="next">${last?"Voir mon bilan":"Question suivante →"}</button>`
+           : `<button class="btn big" id="val" disabled>Valider ma réponse</button>`}`;
+
+  if(!done){
+    const val=document.getElementById("val");
+    if(q.type==="open"){
+      const t=document.getElementById("txt");
+      const chk=()=>val.disabled=t.value.trim().length<3;
+      t.addEventListener("input",chk); chk();
+      val.onclick=()=>{ S.answers[S.i]={text:t.value.trim()}; S.validated=true; save(); render(); };
+    } else {
+      let sel = null;
+      app.querySelectorAll(".opt").forEach(b=>b.onclick=()=>{
+        sel=+b.dataset.k; app.querySelectorAll(".opt").forEach(x=>x.classList.toggle("sel",+x.dataset.k===sel)); val.disabled=false;
+      });
+      val.onclick=()=>{ S.answers[S.i]={choice:sel}; S.validated=true; save(); render(); };
+    }
+  } else {
+    document.getElementById("next").onclick=()=>{
+      S.validated=false;
+      if(last){ S.step="end"; S.end=new Date().toISOString(); } else S.i++;
+      save(); render(); window.scrollTo(0,0);
+    };
+  }
+}
+function cls(q,a,k,done){
+  if(!done) return "";
+  if(k===q.answer) return "good";
+  if(a && a.choice===k) return "bad";
+  return "";
+}
+
+function scores(){
+  const r={run:[0,0],throw:[0,0],total:[0,0]};
+  QUESTIONS.forEach((q,i)=>{ if(q.type==="open") return; const ok=S.answers[i]&&S.answers[i].choice===q.answer;
+    r[q.theme][1]++; r.total[1]++; if(ok){ r[q.theme][0]++; r.total[0]++; } });
+  return r;
+}
+function note20(){ const s=scores(); return Math.round(s.total[0]/s.total[1]*20*2)/2; }
+
+function renderEnd(){
+  const s=scores(), n=note20();
+  const msg = n>=16?"Excellent travail !":n>=12?"Bon travail !":n>=8?"C'est un début, relis bien les corrections.":"Relis bien les corrections ci-dessous, tu vas progresser !";
+  app.innerHTML = `
+    <h2>Ton bilan, ${esc(S.eleve.prenom)}</h2>
+    <div class="score">${s.total[0]} / ${s.total[1]}</div>
+    <p style="text-align:center;margin:0">soit <b>${String(n).replace(".",",")} / 20</b> — ${msg}</p>
+    <div class="parts">
+      <div class="part run">Course en durée<div>${s.run[0]} / ${s.run[1]}</div></div>
+      <div class="part throw">Lancer de vortex<div>${s.throw[0]} / ${s.throw[1]}</div></div>
+    </div>
+    <h2 style="margin-top:20px">Envoie ton bilan à ton professeur</h2>
+    <ol class="steps">
+      <li>Appuie sur <b>« Envoyer mon bilan »</b>. Sur téléphone, choisis ton application mail (Gmail…).</li>
+      <li>Si le PDF n'est pas déjà joint : appuie sur <b>« Télécharger le PDF »</b>, puis joins-le à ton mail.</li>
+      <li>Adresse du professeur : <span class="mail">${PROF_EMAIL}</span> <button class="btn sec" id="copy" style="margin:0;padding:4px 10px;font-size:14px">Copier</button></li>
+    </ol>
+    <button class="btn big" id="send">Envoyer mon bilan</button>
+    <button class="btn sec big" id="dl">Télécharger le PDF</button>
+    <p class="small" id="status"></p>
+    <div class="recap"><b>Tes réponses</b>${QUESTIONS.map((q,i)=>{
+      const a=S.answers[i]||{};
+      if(q.type==="open") return `<div>${i+1}. ${esc(q.q)}<br><i>${esc(a.text||"")}</i></div>`;
+      const ok=a.choice===q.answer;
+      return `<div>${ok?"✔":"✘"} ${i+1}. ${esc(q.q)}${ok?"":`<br><span class="small">Bonne réponse : ${esc(q.options[q.answer])}</span>`}</div>`;
+    }).join("")}</div>
+    <button class="btn sec" id="reset">Refaire le quiz</button>`;
+
+  const status=document.getElementById("status");
+  document.getElementById("dl").onclick=()=>{ try{ makePdf().save(fileName()); status.textContent="PDF téléchargé : regarde dans tes téléchargements."; }catch(e){ status.textContent="Impossible de créer le PDF ("+e.message+")."; } };
+  document.getElementById("copy").onclick=()=>{ navigator.clipboard && navigator.clipboard.writeText(PROF_EMAIL).then(()=>status.textContent="Adresse copiée !"); };
+  document.getElementById("send").onclick=async()=>{
+    let file=null;
+    try{ const blob=makePdf().output("blob"); file=new File([blob], fileName(), {type:"application/pdf"}); }catch(e){}
+    if(file && navigator.canShare && navigator.canShare({files:[file]})){
+      try{
+        await navigator.share({ files:[file], title:subject(), text:`À envoyer à : ${PROF_EMAIL}\n\n${mailBody()}` });
+        status.textContent="Vérifie bien que le mail part à "+PROF_EMAIL+".";
+        return;
+      }catch(e){ if(e.name==="AbortError") return; }
+    }
+    // Ordinateur : on télécharge le PDF puis on ouvre la messagerie
+    if(file){ try{ makePdf().save(fileName()); }catch(e){} }
+    status.innerHTML="Le PDF a été téléchargé. Ta messagerie va s'ouvrir : <b>joins le fichier PDF</b> au mail avant de l'envoyer. Si rien ne s'ouvre, écris toi-même à "+PROF_EMAIL+" depuis ta messagerie (Gmail, ENT…).";
+    location.href=`mailto:${PROF_EMAIL}?subject=${encodeURIComponent(subject())}&body=${encodeURIComponent(mailBody())}`;
+  };
+  document.getElementById("reset").onclick=()=>{ if(confirm("Effacer tes réponses et recommencer ?")){ localStorage.removeItem(STORAGE); location.reload(); } };
+}
+
+function fullName(){ return `${S.eleve.prenom} ${S.eleve.nom}`.trim(); }
+function subject(){ return `Quiz EPS combiné - ${fullName()} - ${S.eleve.classe}`; }
+function fileName(){ return `Bilan_EPS_${(S.eleve.nom+"_"+S.eleve.prenom).normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^A-Za-z0-9_-]+/g,"_")}.pdf`; }
+function mailBody(){
+  const s=scores();
+  let b=`Bonjour,\n\nVoici mon bilan du quiz EPS (PDF joint).\n\n${fullName()} - ${S.eleve.classe}\nScore : ${s.total[0]}/${s.total[1]} (${String(note20()).replace(".",",")}/20)\nCourse en durée : ${s.run[0]}/${s.run[1]}\nLancer de vortex : ${s.throw[0]}/${s.throw[1]}\n\n`;
+  b += QUESTIONS.map((q,i)=>{ const a=S.answers[i]||{}; return q.type==="open" ? `Q${i+1} : ${a.text||""}` : `Q${i+1} : ${a.choice===q.answer?"juste":"faux"}`; }).join("\n");
+  return b + "\n\nCordialement,\n" + S.eleve.prenom;
+}
+
+/* =========================================================
+   PDF DU BILAN
+   ========================================================= */
+function pdfSafe(s){ // police standard du PDF : on remplace les caractères non pris en charge
+  return String(s).replace(/[→]/g,"->").replace(/[✔]/g,"").replace(/[✘]/g,"").replace(/[  ]/g," ").replace(/[^\x00-\xFF’Œœ…–—]/g,"");
+}
+/* Mini générateur PDF intégré (A4, polices Helvetica standard) : aucune connexion nécessaire */
+const HELV_W = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
+const WIN = {"’":0x92,"‘":0x91,"Œ":0x8C,"œ":0x9C,"…":0x85,"–":0x96,"—":0x97,"“":0x93,"”":0x94};
+class MiniPDF{
+  constructor(){ this.pages=[]; this.p=null; this.font="F1"; this.size=11; this.tc="0 0 0"; this.fc="0 0 0"; this.addPage(); }
+  addPage(){ this.p=[]; this.pages.push(this.p); }
+  getNumberOfPages(){ return this.pages.length; }
+  setPage(n){ this.p=this.pages[n-1]; }
+  setFont(f,style){ this.font = style==="bold"?"F2":style==="italic"?"F3":"F1"; }
+  setFontSize(s){ this.size=s; }
+  setTextColor(r,g,b){ this.tc=[r,g,b].map(v=>(v/255).toFixed(3)).join(" "); }
+  setFillColor(r,g,b){ this.fc=[r,g,b].map(v=>(v/255).toFixed(3)).join(" "); }
+  pt(mm){ return (mm*72/25.4).toFixed(2); }
+  enc(s){ let o=""; for(const ch of s){ let c=WIN[ch]!==undefined?WIN[ch]:ch.charCodeAt(0); if(c>255) c=63; o+=String.fromCharCode(c); }
+          return o.replace(/\\/g,"\\\\").replace(/\(/g,"\\(").replace(/\)/g,"\\)"); }
+  width(s){ // largeur en mm
+    let w=0; for(const ch of s.normalize("NFD").replace(/[̀-ͯ]/g,"")){ const c=ch.charCodeAt(0); w += (c>=32&&c<=126)?HELV_W[c-32]:556; }
+    return w/1000*this.size*(this.font==="F2"?1.07:1)*25.4/72;
+  }
+  text(s,x,y,opt={}){ if(opt.align==="right") x-=this.width(s);
+    this.p.push(`BT /${this.font} ${this.size} Tf ${this.tc} rg ${this.pt(x)} ${(841.89-y*72/25.4).toFixed(2)} Td (${this.enc(s)}) Tj ET`); }
+  rect(x,y,w,h){ this.p.push(`${this.fc} rg ${this.pt(x)} ${(841.89-(y+h)*72/25.4).toFixed(2)} ${this.pt(w)} ${this.pt(h)} re f`); }
+  splitTextToSize(s,maxW){
+    const out=[]; String(s).split("\n").forEach(par=>{ let line="";
+      par.split(" ").forEach(word=>{ const t=line?line+" "+word:word; if(this.width(t)>maxW && line){ out.push(line); line=word; } else line=t; });
+      out.push(line); }); return out;
+  }
+  output(){
+    const objs=[]; const add=s=>{ objs.push(s); return objs.length; };
+    add("<< /Type /Catalog /Pages 2 0 R >>"); add("");
+    ["Helvetica","Helvetica-Bold","Helvetica-Oblique"].forEach(f=>add(`<< /Type /Font /Subtype /Type1 /BaseFont /${f} /Encoding /WinAnsiEncoding >>`));
+    const kids=[];
+    this.pages.forEach(ops=>{ const c=ops.join("\n"); const cid=add(`<< /Length ${c.length} >>\nstream\n${c}\nendstream`);
+      kids.push(add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents ${cid} 0 R >>`)); });
+    objs[1]=`<< /Type /Pages /Kids [${kids.map(k=>k+" 0 R").join(" ")}] /Count ${kids.length} >>`;
+    let pdf="%PDF-1.4\n%\xE2\xE3\xCF\xD3\n"; const off=[];
+    objs.forEach((o,i)=>{ off.push(pdf.length); pdf+=`${i+1} 0 obj\n${o}\nendobj\n`; });
+    const x=pdf.length;
+    pdf+=`xref\n0 ${objs.length+1}\n0000000000 65535 f \n`+off.map(o=>String(o).padStart(10,"0")+" 00000 n \n").join("");
+    pdf+=`trailer\n<< /Size ${objs.length+1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF`;
+    const bytes=new Uint8Array(pdf.length); for(let i=0;i<pdf.length;i++) bytes[i]=pdf.charCodeAt(i)&255;
+    return new Blob([bytes],{type:"application/pdf"});
+  }
+  save(name){ const url=URL.createObjectURL(this.output()); const a=document.createElement("a"); a.href=url; a.download=name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),10000); }
+}
+
+function makePdf(){
+  const doc = new MiniPDF();
+  const M=15, W=210-2*M; let y=18;
+  const need=(h)=>{ if(y+h>282){ doc.addPage(); y=18; } };
+  const write=(txt,size=11,style="normal",color=[29,37,48],indent=0)=>{
+    doc.setFont("helvetica",style); doc.setFontSize(size); doc.setTextColor(...color);
+    const lines=doc.splitTextToSize(pdfSafe(txt), W-indent);
+    lines.forEach(l=>{ need(size*0.45); doc.text(l, M+indent, y); y+=size*0.45; });
+  };
+  const s=scores(), n=note20();
+  doc.setFillColor(31,111,235); doc.rect(0,0,210,30,"F");
+  doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(16);
+  doc.text(pdfSafe(TITRE), M, 13);
+  doc.setFont("helvetica","normal"); doc.setFontSize(11);
+  doc.text(pdfSafe(`${fullName()}  -  Classe : ${S.eleve.classe}`), M, 21);
+  const d = new Date(S.end||Date.now());
+  doc.text(pdfSafe(`Fait le ${d.toLocaleDateString("fr-FR")} à ${d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}`), M, 27);
+  y=42;
+  write(`Score : ${s.total[0]} / ${s.total[1]}   soit ${String(n).replace(".",",")} / 20`,15,"bold");
+  y+=1;
+  write(`Course en durée (demi-fond) : ${s.run[0]} / ${s.run[1]}        Lancer de vortex : ${s.throw[0]} / ${s.throw[1]}`,11);
+  y+=4;
+  let lastTheme=null;
+  QUESTIONS.forEach((q,i)=>{
+    if(q.theme!==lastTheme){
+      need(14); y+=3;
+      const col = q.theme==="run"?[232,89,12]:[103,65,217];
+      doc.setFillColor(...col); doc.rect(M, y-5, W, 8, "F");
+      doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(12);
+      doc.text(q.theme==="run"?"COURSE EN DUREE (DEMI-FOND)":"LANCER DE VORTEX", M+2, y);
+      y+=8; lastTheme=q.theme;
+    }
+    need(18);
+    const a=S.answers[i]||{};
+    write(`${i+1}. ${q.q}`,11,"bold");
+    if(q.type==="open"){
+      write(`Réponse de l'élève : ${a.text||"(pas de réponse)"}`,11,"italic",[29,37,48],4);
+      write(`(question ouverte, à corriger par le professeur)`,9,"normal",[110,110,110],4);
+    } else {
+      const ok=a.choice===q.answer;
+      const rep = a.choice==null ? "(pas de réponse)" : `${LETTERS[a.choice]} - ${q.options[a.choice]}`;
+      write(`Ta réponse : ${rep}   ->  ${ok?"JUSTE":"FAUX"}`,11,"normal", ok?[26,127,55]:[198,40,40],4);
+      if(!ok) write(`Bonne réponse : ${LETTERS[q.answer]} - ${q.options[q.answer]}`,11,"normal",[29,37,48],4);
+      write(q.explain,9,"italic",[90,90,90],4);
+    }
+    y+=3;
+  });
+  const pages=doc.getNumberOfPages();
+  for(let p=1;p<=pages;p++){ doc.setPage(p); doc.setFontSize(8); doc.setTextColor(140,140,140); doc.text(pdfSafe(`${fullName()} - page ${p}/${pages}`), 210-M, 292, {align:"right"}); }
+  return doc;
+}
+
+render();
+</script>
+</body>
+</html>
